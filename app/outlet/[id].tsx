@@ -9,7 +9,7 @@ import { useFavorites } from '@/contexts/favorites-context';
 import { useHistory } from '@/contexts/history-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { api } from '@/services/api';
-import { getOutletDiscounts, searchItems as searchItemsApi } from '@/services/customer-api';
+import { getOutletDiscounts, searchItems as searchItemsApi, submitFeedback } from '@/services/customer-api';
 import { getOutletFromCache } from '@/services/outlet-cache';
 import type { Item, Outlet, OutletDiscount, RouteInfo } from '@/types/api';
 import * as Linking from 'expo-linking';
@@ -115,6 +115,7 @@ export default function OutletDetailScreen() {
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [discounts, setDiscounts] = useState<OutletDiscount[]>([]);
   const [discountsLoading, setDiscountsLoading] = useState(false);
+  const [selectedDiscount, setSelectedDiscount] = useState<OutletDiscount | null>(null);
 
   const tint = useThemeColor({}, 'tint');
   const cardBg = useThemeColor({}, 'card');
@@ -271,12 +272,13 @@ export default function OutletDetailScreen() {
   const openArrivedModal = useCallback(() => {
     if (!outlet) return;
     addVisitedOutlet(outlet);
-    setAddToFavoritesChecked(!isFavorite(outlet.id));
-    setAddToFavoritesNickname(outlet.name);
+    const alreadyFavorite = isFavorite(outlet.id);
+    setAddToFavoritesChecked(alreadyFavorite);
+    setAddToFavoritesNickname(alreadyFavorite ? (getFavoriteEntry(outlet.id)?.nickname?.trim() ?? outlet.name) : outlet.name);
     setFeedbackRating(5);
     setFeedbackText('');
     setArrivedModalVisible(true);
-  }, [outlet, addVisitedOutlet, isFavorite]);
+  }, [outlet, addVisitedOutlet, isFavorite, getFavoriteEntry]);
 
   const closeArrivedModal = useCallback(() => {
     setArrivedModalVisible(false);
@@ -285,11 +287,23 @@ export default function OutletDetailScreen() {
   const handleArrivedSubmit = useCallback(async () => {
     if (!outlet) return;
     setFeedbackSubmitting(true);
-    if (addToFavoritesChecked) addFavorite(outlet, addToFavoritesNickname.trim() || outlet.name);
-    // TODO: POST feedback to API (outletId, rating: feedbackRating, comment: feedbackText)
-    setFeedbackSubmitting(false);
-    setArrivedModalVisible(false);
-  }, [outlet, addToFavoritesChecked, addToFavoritesNickname, feedbackRating, feedbackText, addFavorite]);
+    try {
+      if (addToFavoritesChecked) addFavorite(outlet, addToFavoritesNickname.trim() || outlet.name);
+      if (token) {
+        const outletIdNum = Number(outlet.id);
+        if (!Number.isNaN(outletIdNum)) {
+          await submitFeedback(token, {
+            outletId: outletIdNum,
+            feedbackText: feedbackText.trim(),
+            rating: feedbackRating,
+          });
+        }
+      }
+    } finally {
+      setFeedbackSubmitting(false);
+      setArrivedModalVisible(false);
+    }
+  }, [outlet, addToFavoritesChecked, addToFavoritesNickname, feedbackRating, feedbackText, addFavorite, token]);
 
   if (!outlet) {
     return (
@@ -307,9 +321,12 @@ export default function OutletDetailScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* ——— Outlet details ——— */}
         <View style={[styles.section, styles.card, { backgroundColor: cardBg, borderColor }]}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Outlet details
-          </ThemedText>
+          <View style={[styles.sectionTitleRow, { backgroundColor: Theme.secondary + '12' }]}>
+            <IconSymbol name="map.fill" size={20} color={Theme.secondary} />
+            <ThemedText type="subtitle" style={[styles.sectionTitle, styles.sectionTitleColored, { color: Theme.secondary }]}>
+              Outlet details
+            </ThemedText>
+          </View>
           <View style={styles.outletNameRow}>
             <ThemedText type="defaultSemiBold" style={styles.name}>{outlet.name}</ThemedText>
             {isFavorite(outlet.id) && (
@@ -327,7 +344,7 @@ export default function OutletDetailScreen() {
             {outlet.rating != null && (
               <ThemedText style={styles.rating}>★ {outlet.rating.toFixed(1)}</ThemedText>
             )}
-            <ThemedText style={styles.openStatus}>
+            <ThemedText style={[styles.openStatus, outlet.isOpen && styles.openStatusGreen]}>
               {outlet.isOpen ? 'Open' : 'Closed'}
             </ThemedText>
           </View>
@@ -383,21 +400,29 @@ export default function OutletDetailScreen() {
         </View>
 
         {/* ——— Available discount now ——— */}
-        <View style={[styles.section, styles.card, { backgroundColor: cardBg, borderColor }]}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Available discount now
-          </ThemedText>
+        <View style={[styles.section, styles.discountSectionCard, { backgroundColor: cardBg, borderColor }]}>
+          <View style={[styles.discountSectionHeader, { backgroundColor: Theme.primary + '12' }]}>
+            <View style={[styles.discountSectionIconWrap, { backgroundColor: Theme.primary }]}>
+              <IconSymbol name="tag.fill" size={22} color="#fff" />
+            </View>
+            <View style={styles.discountSectionHeaderText}>
+              <ThemedText type="subtitle" style={styles.discountSectionTitle}>
+                Available discount now
+              </ThemedText>
+              <ThemedText style={styles.discountSectionSubtitle}>Tap a card for details</ThemedText>
+            </View>
+          </View>
           {discountsLoading ? (
-            <View style={styles.discountLoaderWrap}>
+            <View style={[styles.discountLoaderWrap, { paddingHorizontal: 18, paddingBottom: 20 }]}>
               <ActivityIndicator size="small" color={tint} />
               <ThemedText style={styles.hint}>Loading discounts…</ThemedText>
             </View>
           ) : discounts.length === 0 ? (
-            <ThemedText style={styles.hint}>No current discounts.</ThemedText>
+            <ThemedText style={[styles.hint, { paddingHorizontal: 18, paddingBottom: 20 }]}>No current discounts.</ThemedText>
           ) : (
             <ScrollView
               horizontal
-              showsHorizontalScrollIndicator={true}
+              showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.discountScrollContent}
             >
               {discounts.map((d) => {
@@ -406,7 +431,11 @@ export default function OutletDetailScreen() {
                   ? `${FIND_IT_API_BASE}/images/show?type=${DISCOUNT_IMAGE_TYPE}&fileName=${encodeURIComponent(discountFileName)}`
                   : null;
                 return (
-                  <View key={d.id} style={[styles.discountCard, { borderColor }]}>
+                  <Pressable
+                    key={d.id}
+                    style={({ pressed }) => [styles.discountCard, { borderColor }, pressed && styles.discountCardPressed]}
+                    onPress={() => setSelectedDiscount(d)}
+                  >
                     {discountImageUri ? (
                       <Image
                         source={{ uri: discountImageUri, headers: token ? { Authorization: `Bearer ${token}` } : undefined }}
@@ -416,16 +445,12 @@ export default function OutletDetailScreen() {
                     ) : (
                       <View style={[styles.discountImagePlaceholder, { backgroundColor: borderColor }]} />
                     )}
-                    <ThemedText type="defaultSemiBold" style={styles.discountTitle} numberOfLines={2}>
-                      {d.title}
-                    </ThemedText>
-                    {d.discountPercentage != null && (
-                      <ThemedText style={styles.discountPct}>{d.discountPercentage}% off</ThemedText>
-                    )}
-                    {d.description ? (
-                      <ThemedText style={styles.discountDesc} numberOfLines={2}>{d.description}</ThemedText>
-                    ) : null}
-                  </View>
+                    <View style={[styles.discountNameStrip, { backgroundColor: Theme.primary }]}>
+                      <ThemedText type="defaultSemiBold" style={styles.discountCardTitle} numberOfLines={2}>
+                        {d.title}
+                      </ThemedText>
+                    </View>
+                  </Pressable>
                 );
               })}
             </ScrollView>
@@ -434,9 +459,12 @@ export default function OutletDetailScreen() {
 
         {/* ——— Items ——— */}
         <View style={[styles.section, styles.card, { backgroundColor: cardBg, borderColor }]}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Items
-          </ThemedText>
+          <View style={[styles.sectionTitleRow, { backgroundColor: Theme.accent + '18' }]}>
+            <IconSymbol name="list.bullet" size={20} color={Theme.accent} />
+            <ThemedText type="subtitle" style={[styles.sectionTitle, styles.sectionTitleColored, { color: Theme.accent }]}>
+              Items
+            </ThemedText>
+          </View>
           <View style={[styles.searchWrap, { borderColor }]}>
             <IconSymbol name="magnifyingglass" size={18} color={tint} />
             <TextInput
@@ -550,19 +578,20 @@ export default function OutletDetailScreen() {
 
             <View style={styles.toggleRow}>
               <ThemedText style={styles.toggleLabel}>
-                {isFavorite(outlet.id) ? 'Already in favorites' : 'Add this outlet to favorites?'}
+                {isFavorite(outlet.id) ? 'In favorites – toggle off to hide nickname' : 'Add this outlet to favorites?'}
               </ThemedText>
               <Switch
-                value={isFavorite(outlet.id) || addToFavoritesChecked}
+                value={addToFavoritesChecked}
                 onValueChange={(v) => setAddToFavoritesChecked(v)}
-                disabled={isFavorite(outlet.id)}
                 trackColor={{ false: '#94a3b8', true: Theme.primary }}
                 thumbColor="#ffffff"
               />
             </View>
-            {!isFavorite(outlet.id) && addToFavoritesChecked && (
+            {addToFavoritesChecked && (
               <View style={styles.nicknameRow}>
-                <ThemedText style={styles.feedbackLabel}>Nickname (optional)</ThemedText>
+                <ThemedText style={styles.feedbackLabel}>
+                  {isFavorite(outlet.id) ? 'Nickname (edit)' : 'Nickname (optional)'}
+                </ThemedText>
                 <TextInput
                   style={[styles.feedbackInput, styles.nicknameInput, { borderColor, color: Theme.text }]}
                   placeholder={outlet.name}
@@ -619,6 +648,77 @@ export default function OutletDetailScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Discount detail popup */}
+      <Modal visible={selectedDiscount != null} transparent animationType="fade">
+        <Pressable style={styles.discountModalOverlay} onPress={() => setSelectedDiscount(null)}>
+          <Pressable style={[styles.discountModalContent, { backgroundColor: cardBg }]} onPress={(e) => e.stopPropagation()}>
+            {selectedDiscount && (() => {
+              const d = selectedDiscount;
+              const discountFileName = d.image?.includes('/') ? d.image.split('/').pop() : d.image;
+              const discountImageUri = d.image && discountFileName
+                ? `${FIND_IT_API_BASE}/images/show?type=${DISCOUNT_IMAGE_TYPE}&fileName=${encodeURIComponent(discountFileName)}`
+                : null;
+              const formatDate = (s?: string) => s ? new Date(s).toLocaleDateString(undefined, { dateStyle: 'medium' }) : null;
+              return (
+                <>
+                  <View style={[styles.discountModalHeader, { borderColor }]}>
+                    <View style={styles.discountModalHeaderLeft}>
+                      <View style={[styles.discountModalPill, { backgroundColor: Theme.primary + '18' }]}>
+                        <IconSymbol name="tag.fill" size={16} color={Theme.primary} />
+                        <ThemedText type="defaultSemiBold" style={[styles.discountModalLabel, { color: Theme.primary }]}>Offer</ThemedText>
+                      </View>
+                      <ThemedText type="subtitle" style={styles.discountModalTitle} numberOfLines={2}>{d.title}</ThemedText>
+                    </View>
+                    <Pressable hitSlop={16} onPress={() => setSelectedDiscount(null)} style={[styles.discountModalClose, { backgroundColor: borderColor }]}>
+                      <IconSymbol name="xmark.circle.fill" size={26} color={Theme.primary} />
+                    </Pressable>
+                  </View>
+                  <View style={styles.discountModalImageWrap}>
+                    {discountImageUri ? (
+                      <Image
+                        source={{ uri: discountImageUri, headers: token ? { Authorization: `Bearer ${token}` } : undefined }}
+                        style={styles.discountModalImage}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <View style={[styles.discountModalImagePlaceholder, { backgroundColor: borderColor }]} />
+                    )}
+                    {d.discountPercentage != null && (
+                      <View style={[styles.discountModalPctBadge, { backgroundColor: Theme.primary }]}>
+                        <ThemedText type="defaultSemiBold" style={styles.discountModalPctText}>
+                          {d.discountPercentage}% off
+                        </ThemedText>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.discountModalBody}>
+                    {d.description ? (
+                      <ThemedText style={styles.discountModalDesc}>{d.description}</ThemedText>
+                    ) : null}
+                    {(d.validFrom || d.validTo) ? (
+                      <View style={[styles.discountModalDates, { backgroundColor: Theme.primary + '0c', borderColor }]}>
+                        {d.validFrom && (
+                          <ThemedText style={styles.discountModalDate}>From {formatDate(d.validFrom)}</ThemedText>
+                        )}
+                        {d.validTo && (
+                          <ThemedText style={styles.discountModalDate}>Until {formatDate(d.validTo)}</ThemedText>
+                        )}
+                      </View>
+                    ) : null}
+                  </View>
+                  <Pressable
+                    style={({ pressed }) => [styles.discountModalCloseBtn, pressed && styles.pressed]}
+                    onPress={() => setSelectedDiscount(null)}
+                  >
+                    <ThemedText style={styles.discountModalCloseBtnText}>Close</ThemedText>
+                  </Pressable>
+                </>
+              );
+            })()}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ThemedView>
   );
 }
@@ -629,10 +729,49 @@ const styles = StyleSheet.create({
   empty: { padding: 20 },
   section: { marginBottom: 16 },
   sectionTitle: { marginBottom: 12 },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: Layout.radius.md,
+    marginBottom: 14,
+  },
+  sectionTitleColored: { color: Theme.primary, marginBottom: 0 },
+  sectionDiscount: { borderLeftWidth: 4, borderLeftColor: Theme.primary },
+  discountSectionCard: {
+    marginBottom: 20,
+    borderRadius: Layout.radius.xl,
+    borderWidth: 1,
+    padding: 0,
+    overflow: 'hidden',
+    ...Layout.shadow.md,
+  },
+  discountSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+  },
+  discountSectionIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  discountSectionHeaderText: { flex: 1 },
+  discountSectionTitle: { fontSize: 17, color: Theme.primary, marginBottom: 2 },
+  discountSectionSubtitle: { fontSize: 13, opacity: 0.7 },
+  discountScrollContent: { paddingVertical: 16, paddingHorizontal: 18, paddingRight: 18, gap: 14 },
+  discountCardPressed: { opacity: 0.92, transform: [{ scale: 0.98 }] },
   card: {
     borderRadius: Layout.radius.lg,
     borderWidth: 1,
     padding: 16,
+    ...Layout.shadow.md,
   },
   outletNameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   name: { fontSize: 18, flex: 1 },
@@ -651,23 +790,91 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
   rating: { fontSize: 14 },
   openStatus: { fontSize: 14, opacity: 0.8 },
+  openStatusGreen: { color: '#16a34a', fontWeight: '600' },
   routeRow: { marginTop: 6, fontSize: 14 },
   routeLoaderWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
   hint: { fontSize: 14, opacity: 0.7, marginTop: 8 },
   discountLoaderWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
-  discountScrollContent: { paddingVertical: 4, paddingRight: 16 },
   discountCard: {
-    width: 160,
-    marginRight: 12,
+    width: 172,
     borderWidth: 1,
-    borderRadius: Layout.radius.md,
+    borderRadius: Layout.radius.lg,
     overflow: 'hidden',
+    ...Layout.shadow.sm,
   },
-  discountImage: { width: '100%', height: 100 },
-  discountImagePlaceholder: { width: '100%', height: 100 },
-  discountTitle: { fontSize: 14, paddingHorizontal: 10, paddingTop: 8 },
-  discountPct: { fontSize: 13, color: Theme.primary, fontWeight: '600', paddingHorizontal: 10, marginTop: 2 },
-  discountDesc: { fontSize: 12, opacity: 0.85, paddingHorizontal: 10, paddingBottom: 10, marginTop: 2 },
+  discountImage: { width: '100%', height: 104 },
+  discountImagePlaceholder: { width: '100%', height: 104 },
+  discountNameStrip: { paddingVertical: 10, paddingHorizontal: 12 },
+  discountCardTitle: { fontSize: 14, color: '#fff', textAlign: 'center' },
+  discountModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  discountModalContent: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: 20,
+    overflow: 'hidden',
+    ...Layout.shadow.lg,
+  },
+  discountModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+  },
+  discountModalHeaderLeft: { flex: 1, marginRight: 12 },
+  discountModalPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  discountModalLabel: { fontSize: 12 },
+  discountModalTitle: { fontSize: 18, lineHeight: 24 },
+  discountModalClose: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  discountModalImageWrap: { position: 'relative', marginHorizontal: 16, marginTop: 12 },
+  discountModalImage: { width: '100%', height: 200, borderRadius: Layout.radius.lg },
+  discountModalImagePlaceholder: { width: '100%', height: 200, borderRadius: Layout.radius.lg },
+  discountModalPctBadge: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  discountModalPctText: { fontSize: 15, color: '#fff', fontWeight: '700' },
+  discountModalBody: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
+  discountModalDesc: { fontSize: 15, lineHeight: 22, opacity: 0.9, marginBottom: 12 },
+  discountModalDates: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: Layout.radius.md,
+    borderWidth: 1,
+    gap: 4,
+  },
+  discountModalDate: { fontSize: 13, opacity: 0.85 },
+  discountModalCloseBtn: {
+    marginHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 20,
+    backgroundColor: Theme.primary,
+    paddingVertical: 14,
+    borderRadius: Layout.radius.lg,
+    alignItems: 'center',
+  },
+  discountModalCloseBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   showRouteBtn: {
     flexDirection: 'row',
     alignItems: 'center',

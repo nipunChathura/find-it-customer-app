@@ -5,6 +5,7 @@
 import {
     deleteSearchHistoryEntry as deleteSearchHistoryEntryApi,
     getSearchHistory,
+    saveSearchHistory,
 } from '@/services/customer-api';
 import type { Outlet, SearchHistoryEntry, VisitedOutletEntry } from '@/types/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,13 +15,22 @@ import { useAuth } from './auth-context';
 
 const VISITED_KEY = 'findit_visited';
 
+export interface SearchHistoryParams {
+  latitude: number;
+  longitude: number;
+  distanceKm: number;
+  categoryId?: string | null;
+  outletType?: string | null;
+}
+
 interface HistoryContextValue {
   searchHistory: SearchHistoryEntry[];
   searchHistoryLoading: boolean;
+  clearSearchHistoryLoading: boolean;
   refreshSearchHistory: () => Promise<void>;
   deleteSearchHistoryEntry: (id: string) => Promise<void>;
   visitedOutlets: VisitedOutletEntry[];
-  addSearchHistory: (query: string, outlets: Outlet[]) => Promise<void>;
+  addSearchHistory: (query: string, outlets: Outlet[], params?: SearchHistoryParams) => Promise<void>;
   addVisitedOutlet: (outlet: Outlet) => Promise<void>;
   clearSearchHistory: () => Promise<void>;
   getSearchEntry: (id: string) => SearchHistoryEntry | undefined;
@@ -32,6 +42,7 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
   const { token, user } = useAuth();
   const [searchHistory, setSearchHistory] = useState<SearchHistoryEntry[]>([]);
   const [searchHistoryLoading, setSearchHistoryLoading] = useState(false);
+  const [clearSearchHistoryLoading, setClearSearchHistoryLoading] = useState(false);
   const [visitedOutlets, setVisitedOutlets] = useState<VisitedOutletEntry[]>([]);
 
   const visitedKey = user ? `${VISITED_KEY}_${user.id}` : null;
@@ -71,10 +82,26 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(visitedKey, JSON.stringify(visitedOutlets)).catch(() => {});
   }, [visitedKey, visitedOutlets]);
 
-  const addSearchHistory = useCallback(async (_query: string, _outlets: Outlet[]) => {
-    // No local/dummy data: search history list is loaded only from API (GET /customer-app/search-history).
-    // Saving is done by caller via saveSearchHistory API; then refreshSearchHistory() will load updated list.
-  }, []);
+  const addSearchHistory = useCallback(
+    async (query: string, _outlets: Outlet[], params?: SearchHistoryParams) => {
+      const searchText = query?.trim();
+      if (!searchText || !token || !params) return;
+      try {
+        await saveSearchHistory(token, {
+          searchText,
+          latitude: params.latitude,
+          longitude: params.longitude,
+          distanceKm: params.distanceKm,
+          categoryId: params.categoryId ?? null,
+          outletType: params.outletType ?? null,
+        });
+        await refreshSearchHistory();
+      } catch {
+        // ignore save failure
+      }
+    },
+    [token, refreshSearchHistory]
+  );
 
   const addVisitedOutlet = useCallback(async (outlet: Outlet) => {
     setVisitedOutlets((prev) => [
@@ -83,7 +110,27 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
     ].slice(0, 49));
   }, []);
 
-  const clearSearchHistory = useCallback(async () => setSearchHistory([]), []);
+  const clearSearchHistory = useCallback(async () => {
+    if (!token) return;
+    const list = [...searchHistory];
+    if (list.length === 0) {
+      setSearchHistory([]);
+      return;
+    }
+    setClearSearchHistoryLoading(true);
+    try {
+      for (const entry of list) {
+        try {
+          await deleteSearchHistoryEntryApi(token, String(entry.id));
+        } catch {
+          // continue with rest
+        }
+      }
+      setSearchHistory([]);
+    } finally {
+      setClearSearchHistoryLoading(false);
+    }
+  }, [token, searchHistory]);
 
   const deleteSearchHistoryEntry = useCallback(
     async (id: string) => {
@@ -107,6 +154,7 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
   const value: HistoryContextValue = {
     searchHistory,
     searchHistoryLoading,
+    clearSearchHistoryLoading,
     refreshSearchHistory,
     deleteSearchHistoryEntry,
     visitedOutlets,

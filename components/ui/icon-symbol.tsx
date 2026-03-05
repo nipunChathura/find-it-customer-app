@@ -35,6 +35,9 @@ const MAPPING = {
   'car.fill': 'directions-car',
   'bicycle': 'directions-bike',
   'figure.walk': 'directions-walk',
+  'tag.fill': 'local-offer',
+  'xmark.circle.fill': 'cancel',
+  'lock.fill': 'lock',
 } as IconMapping;
 
 /**
