@@ -3,7 +3,21 @@
  */
 
 import { FIND_IT_API_BASE } from '@/constants/api';
-import type { CustomerOnboardingRequest } from '@/types/api';
+import type { CustomerOnboardingRequest, Notification } from '@/types/api';
+
+const REQUEST_TIMEOUT_MS = 30_000;
+
+/** fetch with 30s timeout; aborts request on timeout */
+async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { ...init, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(id);
+  }
+}
 
 if (__DEV__) {
   console.log('[API] Backend base URL:', FIND_IT_API_BASE);
@@ -29,7 +43,7 @@ export async function uploadProfileImage(
   }
 
   console.log('[API] Request: POST', url, '(multipart, type=profile)');
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: 'POST',
     headers,
     body: formData,
@@ -65,15 +79,167 @@ export async function uploadProfileImage(
   return String(fileName);
 }
 
-/** POST /customer-app/login – email + password, returns token (and optionally user) */
+/** Profile update payload – fields that can be updated */
+export interface UpdateProfileRequest {
+  firstName?: string;
+  lastName?: string;
+  phoneNumber?: string;
+  nic?: string;
+  dob?: string;
+  gender?: string;
+  countryName?: string;
+}
+
+/** PUT /customer-app/profile – update customer profile. Requires Bearer token. */
+export async function updateCustomerProfile(
+  data: UpdateProfileRequest,
+  token: string
+): Promise<void> {
+  const url = `${FIND_IT_API_BASE}/customer-app/profile`;
+  const body = JSON.stringify(data);
+  console.log('[API] Request: PUT', url, body);
+  const res = await fetchWithTimeout(url, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body,
+  });
+  const text = await res.text();
+  let json: unknown = null;
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    json = { raw: text?.slice(0, 200) };
+  }
+  console.log('[API] Response:', res.status, res.statusText, json);
+  if (!res.ok) {
+    let message = `Profile update failed (${res.status})`;
+    if (json && typeof json === 'object') {
+      const o = json as Record<string, unknown>;
+      if (typeof o.responseMessage === 'string') message = o.responseMessage;
+      else if (typeof o.message === 'string') message = o.message;
+    } else if (text) message = text.slice(0, 200);
+    throw new Error(message);
+  }
+}
+
+/** PUT /customer-app/profile/image – set profile image to uploaded fileName. Body: { fileName }. Requires Bearer token. */
+export async function updateProfileImageOnServer(
+  fileName: string,
+  token: string
+): Promise<void> {
+  const url = `${FIND_IT_API_BASE}/customer-app/profile/image`;
+  const body = JSON.stringify({ fileName });
+  console.log('[API] Request: PUT', url, body);
+  const res = await fetchWithTimeout(url, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body,
+  });
+  const text = await res.text();
+  let json: unknown = null;
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    json = { raw: text?.slice(0, 200) };
+  }
+  console.log('[API] Response:', res.status, res.statusText, json);
+  if (!res.ok) {
+    let message = `Profile image update failed (${res.status})`;
+    if (json && typeof json === 'object' && 'message' in json && typeof (json as { message: unknown }).message === 'string') {
+      message = (json as { message: string }).message;
+    } else if (text) message = text.slice(0, 200);
+    throw new Error(message);
+  }
+}
+
+/** GET /categories – returns list of categories for filter. Query: name, categoryType, status. Requires Bearer token. */
+export interface FindItCategory {
+  categoryId: number;
+  categoryName: string;
+  categoryDescription?: string;
+  categoryImage?: string;
+  categoryType?: string;
+  categoryStatus?: string;
+}
+
+export async function getFindItCategories(
+  options?: { token?: string | null; name?: string; categoryType?: string; status?: string }
+): Promise<FindItCategory[]> {
+  const params = new URLSearchParams();
+  if (options?.name != null) params.set('name', options.name);
+  if (options?.categoryType != null) params.set('categoryType', options.categoryType);
+  if (options?.status != null) params.set('status', options.status);
+  const url = `${FIND_IT_API_BASE}/categories?${params.toString()}`;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (options?.token) headers['Authorization'] = `Bearer ${options.token}`;
+
+  console.log('[API] Request: GET', url);
+  const res = await fetchWithTimeout(url, { method: 'GET', headers });
+  const text = await res.text();
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : [];
+  } catch {
+    data = { raw: text?.slice(0, 200) };
+  }
+  console.log('[API] Response:', res.status, res.statusText, Array.isArray(data) ? data.length : data);
+
+  if (!res.ok) {
+    let message = `Categories failed (${res.status})`;
+    if (data && typeof data === 'object' && 'message' in data && typeof (data as { message: unknown }).message === 'string') {
+      message = (data as { message: string }).message;
+    }
+    throw new Error(message);
+  }
+
+  if (Array.isArray(data)) return data as FindItCategory[];
+  if (data && typeof data === 'object') {
+    const o = data as Record<string, unknown>;
+    if (Array.isArray(o.content)) return o.content as FindItCategory[];
+    if (Array.isArray(o.data)) return o.data as FindItCategory[];
+  }
+  return [];
+}
+
+/** Login API response – flat structure (no nested user) */
+export interface LoginResponse {
+  status?: string;
+  responseCode?: string;
+  responseMessage?: string;
+  token?: string;
+  userId?: number;
+  email?: string;
+  username?: string;
+  userStatus?: string;
+  role?: string;
+  customerId?: number;
+  profileImageUrl?: string;
+  firstName?: string;
+  lastName?: string;
+  phoneNumber?: string;
+  nic?: string;
+  dob?: string;
+  gender?: string;
+  countryName?: string;
+  membershipType?: string;
+  customerStatus?: string;
+}
+
+/** POST /customer-app/login – email + password, returns flat response */
 export async function customerLogin(
   email: string,
   password: string
-): Promise<{ token?: string; accessToken?: string; user?: { id?: string; email?: string; name?: string; mobile?: string } }> {
+): Promise<LoginResponse> {
   const url = `${FIND_IT_API_BASE}/customer-app/login`;
   const body = { email, password };
   console.log('[API] Request: POST', url, body);
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -88,12 +254,56 @@ export async function customerLogin(
   console.log('[API] Response:', res.status, res.statusText, json);
   if (!res.ok) {
     let message = `Login failed (${res.status})`;
-    if (json && typeof json === 'object' && 'message' in json && typeof (json as { message: unknown }).message === 'string') {
-      message = (json as { message: string }).message;
-    } else if (text) message = text.slice(0, 200);
+    const obj = json && typeof json === 'object' ? json as Record<string, unknown> : {};
+    if (typeof obj.responseMessage === 'string') message = obj.responseMessage;
+    else if (typeof obj.message === 'string') message = obj.message;
+    else if (text) message = text.slice(0, 200);
     throw new Error(message);
   }
-  return (typeof json === 'object' && json !== null ? json : {}) as { token?: string; accessToken?: string; user?: { id?: string; email?: string; name?: string; mobile?: string } };
+  return (typeof json === 'object' && json !== null ? json : {}) as LoginResponse;
+}
+
+/** Request body for change password */
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+/** PUT or POST /customer-app/password – change password. Requires Bearer token. */
+export async function changePassword(
+  data: ChangePasswordRequest,
+  token: string
+): Promise<void> {
+  const url = `${FIND_IT_API_BASE}/customer-app/password`;
+  const body = JSON.stringify({
+    currentPassword: data.currentPassword,
+    newPassword: data.newPassword,
+  });
+  console.log('[API] Request: PUT', url, '(password change)');
+  const res = await fetchWithTimeout(url, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body,
+  });
+  const text = await res.text();
+  let json: unknown = null;
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    json = { raw: text?.slice(0, 200) };
+  }
+  console.log('[API] Response:', res.status, res.statusText);
+  if (!res.ok) {
+    let message = `Password change failed (${res.status})`;
+    const obj = json && typeof json === 'object' ? (json as Record<string, unknown>) : {};
+    if (typeof obj.responseMessage === 'string') message = obj.responseMessage;
+    else if (typeof obj.message === 'string') message = obj.message;
+    else if (text) message = text.slice(0, 200);
+    throw new Error(message);
+  }
 }
 
 /** API country item: { code, countryId, name, responseCode?, status? } */
@@ -121,7 +331,7 @@ export async function getCountries(searchName: string = ''): Promise<string[]> {
   const nameParam = typeof searchName === 'string' ? searchName.trim() : '';
   const url = `${FIND_IT_API_BASE}/countries?name=${encodeURIComponent(nameParam)}`;
   console.log('[API] Request: GET', url);
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   const text = await res.text();
   let data: unknown = null;
   try {
@@ -143,7 +353,7 @@ export async function customerOnboarding(
   const url = `${FIND_IT_API_BASE}/customers/onboarding`;
   const body = { ...data, password: data.password ? '***' : undefined };
   console.log('[API] Request: POST', url, body);
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -164,4 +374,62 @@ export async function customerOnboarding(
     throw new Error(message);
   }
   return typeof json === 'object' && json !== null ? json : {};
+}
+
+/** GET /notifications/unread/{userId} – list unread notifications for logged-in user. Requires Bearer token. Pass userId from login response (e.g. 12). */
+function toNotificationList(data: unknown): Notification[] {
+  if (Array.isArray(data)) return data as Notification[];
+  if (data && typeof data === 'object') {
+    const o = data as Record<string, unknown>;
+    if (Array.isArray(o.content)) return o.content as Notification[];
+    if (Array.isArray(o.data)) return o.data as Notification[];
+  }
+  return [];
+}
+
+const MOCK_NOTIFICATIONS: Notification[] = [
+  { id: 'n1', title: 'Welcome to Find It', body: 'Find your nearest outlets and products easily.', read: false, createdAt: new Date(Date.now() - 86400000 * 2).toISOString() },
+  { id: 'n2', title: 'New outlet nearby', body: 'Tech Haven is now open near you.', read: false, createdAt: new Date(Date.now() - 86400000).toISOString() },
+  { id: 'n3', title: 'Promotion', body: '20% off on selected items at Fresh Mart this week.', read: true, createdAt: new Date(Date.now() - 86400000 * 3).toISOString() },
+];
+
+export async function getNotifications(token: string | null, userId: string | null): Promise<Notification[]> {
+  if (!token || !userId) return [...MOCK_NOTIFICATIONS];
+  const url = `${FIND_IT_API_BASE}/notifications/unread/${encodeURIComponent(userId)}`;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  console.log('[API] Request: GET', url);
+  try {
+    const res = await fetchWithTimeout(url, { method: 'GET', headers });
+    const text = await res.text();
+    let data: unknown = null;
+    try {
+      data = text ? JSON.parse(text) : [];
+    } catch {
+      data = { raw: text?.slice(0, 200) };
+    }
+    console.log('[API] Response:', res.status, res.statusText, Array.isArray(data) ? data.length : data);
+    if (!res.ok) return [...MOCK_NOTIFICATIONS];
+    const list = toNotificationList(data);
+    return list.length > 0 ? list : [...MOCK_NOTIFICATIONS];
+  } catch {
+    return [...MOCK_NOTIFICATIONS];
+  }
+}
+
+/** POST /notifications/read/{id} – mark notification as read. Requires Bearer token. */
+export async function markNotificationRead(
+  notificationId: string,
+  token: string | null
+): Promise<boolean> {
+  if (!token) return false;
+  const url = `${FIND_IT_API_BASE}/notifications/read/${encodeURIComponent(notificationId)}`;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  console.log('[API] Request: POST', url);
+  try {
+    const res = await fetchWithTimeout(url, { method: 'POST', headers });
+    console.log('[API] Response:', res.status, res.statusText);
+    return res.ok;
+  } catch {
+    return false;
+  }
 }

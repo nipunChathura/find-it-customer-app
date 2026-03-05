@@ -20,6 +20,7 @@ const MAPPING = {
   'chevron.right': 'chevron-right',
   'magnifyingglass': 'search',
   'line.3.horizontal.decrease.circle': 'filter-list',
+  'line.3.horizontal.decrease.circle.fill': 'filter-list',
   'list.bullet': 'list',
   'map': 'map',
   'heart.fill': 'favorite',

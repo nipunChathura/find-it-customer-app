@@ -1,12 +1,29 @@
 export type ItemCategory = string;
 export type OutletType = string;
 
-/** Logged-in customer (from JWT / API) */
+/** Logged-in customer (from JWT / API – login response is flat) */
 export interface User {
   id: string;
   email: string;
   name: string;
   mobile: string;
+  /** Profile image URL (fileName from backend, e.g. profile/abc.jpg) */
+  profileImageUrl?: string;
+  /** From login response */
+  userId?: number;
+  username?: string;
+  userStatus?: string;
+  role?: string;
+  customerId?: number;
+  firstName?: string;
+  lastName?: string;
+  phoneNumber?: string;
+  nic?: string;
+  dob?: string;
+  gender?: string;
+  countryName?: string;
+  membershipType?: string;
+  customerStatus?: string;
 }
 
 /** Item from search (category, availability) */
@@ -58,6 +75,15 @@ export interface VisitedOutletEntry {
 export interface RouteInfo {
   distanceKm: number;
   durationMinutes: number;
+}
+
+/** Notification for customer (list + mark as read) */
+export interface Notification {
+  id: string;
+  title: string;
+  body: string;
+  read: boolean;
+  createdAt: string; // ISO date
 }
 
 /** Customer onboarding (registration) request – POST /customers/onboarding */

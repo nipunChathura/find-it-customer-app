@@ -3,29 +3,33 @@
  * Uses theme constants; notification → Notifications, profile → Profile tab, logout → clear token & login.
  */
 
+import { FilterSheet, type FilterState } from '@/components/filter-sheet';
 import { HomeOutletCard } from '@/components/home-outlet-card';
+import { NotificationPopup } from '@/components/notification-popup';
 import { OutletsMap } from '@/components/outlets-map';
 import { SearchBar } from '@/components/search-bar';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { OUTLET_TYPE_VALUES } from '@/constants/outlet-types';
 import { Layout, Theme } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
 import { useFavorites } from '@/contexts/favorites-context';
 import { api } from '@/services/api';
-import type { Outlet } from '@/types/api';
+import { getFindItCategories, getNotifications } from '@/services/customer-api';
+import type { ItemCategory, Outlet } from '@/types/api';
 import { Image } from 'expo-image';
 import * as Location from 'expo-location';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Dimensions,
-    FlatList,
-    Keyboard,
-    Pressable,
-    StyleSheet,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  FlatList,
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -33,7 +37,7 @@ const MAP_HEIGHT_RATIO = 0.4;
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function HomeScreen() {
-  const { user, logout } = useAuth();
+  const { logout, token, user } = useAuth();
   const { isFavorite, toggleFavorite } = useFavorites();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -43,12 +47,23 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<FilterState>({ maxDistanceKm: 1 });
+  const [filterSheetVisible, setFilterSheetVisible] = useState(false);
+  const [categories, setCategories] = useState<ItemCategory[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [notificationPopupVisible, setNotificationPopupVisible] = useState(false);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
   const fetchNearest = useCallback(
-    async (query: string, lat?: number, lng?: number) => {
+    async (query: string, lat?: number, lng?: number, filterState?: FilterState) => {
       setLoading(true);
       try {
-        const list = await api.searchNearestOutlets(query, lat, lng);
+        const opts = {
+          category: filterState?.category,
+          outletType: filterState?.outletType,
+          maxDistanceKm: filterState?.maxDistanceKm ?? 1,
+        };
+        const list = await api.searchNearestOutlets(query, lat, lng, opts);
         setOutlets(list);
       } catch (e) {
         setOutlets([]);
@@ -59,6 +74,67 @@ export default function HomeScreen() {
     []
   );
 
+  const loadUnreadNotificationCount = useCallback(async () => {
+    const userId = user?.userId != null ? String(user.userId) : null;
+    if (!token || !userId) return;
+    try {
+      const list = await getNotifications(token, userId);
+      const unread = list.filter((n) => !n.read).length;
+      setUnreadNotificationCount(unread);
+    } catch {
+      setUnreadNotificationCount(0);
+    }
+  }, [token, user?.userId]);
+
+  useEffect(() => {
+    loadUnreadNotificationCount();
+  }, [loadUnreadNotificationCount]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadUnreadNotificationCount();
+    }, [loadUnreadNotificationCount])
+  );
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        if (token) {
+          const findItCats = await getFindItCategories({ token, name: '', categoryType: '', status: '' });
+          if (mounted) setCategories(findItCats.slice(0, 10).map((c) => c.categoryName));
+        } else {
+          const mockCats = await api.getCategories();
+          if (mounted) setCategories(mockCats);
+        }
+      } catch {
+        if (mounted) setCategories([]);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [token]);
+
+  const fetchCategoriesByName = useCallback(
+    async (name: string) => {
+      if (!token) return;
+      setCategoriesLoading(true);
+      try {
+        const list = await getFindItCategories({
+          token,
+          name: name.trim(),
+          categoryType: '',
+          status: '',
+        });
+        setCategories(list.slice(0, 10).map((c) => c.categoryName));
+      } catch {
+        setCategories([]);
+      } finally {
+        setCategoriesLoading(false);
+      }
+    },
+    [token]
+  );
+
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -67,7 +143,7 @@ export default function HomeScreen() {
         if (!mounted) return;
         if (status !== 'granted') {
           setLocationError('Location permission denied');
-          fetchNearest('', undefined, undefined);
+          fetchNearest('', undefined, undefined, filters);
           return;
         }
         const pos = await Location.getCurrentPositionAsync({
@@ -76,11 +152,11 @@ export default function HomeScreen() {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         setLocation({ lat, lng });
-        fetchNearest('', lat, lng);
+        fetchNearest('', lat, lng, filters);
       } catch (e) {
         if (mounted) {
           setLocationError('Could not get location');
-          fetchNearest('', undefined, undefined);
+          fetchNearest('', undefined, undefined, filters);
         }
       }
     })();
@@ -91,8 +167,17 @@ export default function HomeScreen() {
 
   const handleSearchSubmit = useCallback(() => {
     Keyboard.dismiss();
-    fetchNearest(searchQuery.trim(), location?.lat, location?.lng);
-  }, [searchQuery, location, fetchNearest]);
+    fetchNearest(searchQuery.trim(), location?.lat, location?.lng, filters);
+  }, [searchQuery, location, filters, fetchNearest]);
+
+  const handleApplyFilters = useCallback(
+    (newFilters: FilterState) => {
+      setFilters(newFilters);
+      setFilterSheetVisible(false);
+      fetchNearest(searchQuery.trim(), location?.lat, location?.lng, newFilters);
+    },
+    [searchQuery, location, fetchNearest]
+  );
 
   const handleLogout = async () => {
     await logout();
@@ -126,15 +211,19 @@ export default function HomeScreen() {
         <View style={styles.headerIcons}>
           <Pressable
             style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
-            onPress={() => router.push('/notifications')}
+            onPress={() => setNotificationPopupVisible(true)}
+            accessibilityLabel="Notifications"
           >
-            <IconSymbol name="bell.fill" size={24} color={Theme.white} />
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
-            onPress={() => router.push('/(tabs)/profile')}
-          >
-            <IconSymbol name="person.circle.fill" size={24} color={Theme.white} />
+            <View>
+              <IconSymbol name="bell.fill" size={24} color={Theme.white} />
+              {unreadNotificationCount > 0 ? (
+                <View style={styles.notifBadge}>
+                  <ThemedText style={styles.notifBadgeText}>
+                    {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
           </Pressable>
           <Pressable
             style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
@@ -149,16 +238,59 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Search bar: white bg, rounded, shadow, 12–16px padding */}
+      {/* Search bar + search button + clear + filter button */}
       <View style={styles.searchWrap}>
-        <View style={[styles.searchBar, Layout.shadow.sm]}>
-          <SearchBar
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search items, products or services..."
-            onSubmit={handleSearchSubmit}
-          />
+        <View style={styles.searchRow}>
+          <View style={[styles.searchBar, Layout.shadow.sm, styles.searchBarFlex, searchQuery.length > 0 && styles.searchBarWithClear]}>
+            <SearchBar
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search items, products or services..."
+              onSubmit={handleSearchSubmit}
+            />
+            {searchQuery.length > 0 ? (
+              <Pressable
+                style={({ pressed }) => [styles.clearSearchBtn, pressed && styles.clearSearchBtnPressed]}
+                onPress={() => setSearchQuery('')}
+                accessibilityLabel="Clear search"
+              >
+                <IconSymbol name="xmark.circle.fill" size={22} color="#64748B" />
+              </Pressable>
+            ) : null}
+          </View>
+          <Pressable
+            style={({ pressed }) => [styles.searchSubmitBtn, pressed && styles.searchSubmitBtnPressed]}
+            onPress={handleSearchSubmit}
+            accessibilityLabel="Search"
+          >
+            <IconSymbol name="magnifyingglass" size={22} color={Theme.white} />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.filterBtn, pressed && styles.filterBtnPressed]}
+            onPress={() => setFilterSheetVisible(true)}
+            accessibilityLabel="Filters"
+          >
+            <IconSymbol name="line.3.horizontal.decrease.circle.fill" size={28} color={Theme.primary} />
+          </Pressable>
         </View>
+        <FilterSheet
+          visible={filterSheetVisible}
+          onClose={() => setFilterSheetVisible(false)}
+          filters={filters}
+          onApply={handleApplyFilters}
+          categories={categories}
+          outletTypes={[...OUTLET_TYPE_VALUES]}
+          onCategoryNameSearch={token ? fetchCategoriesByName : undefined}
+          categoriesLoading={categoriesLoading}
+        />
+        <NotificationPopup
+          visible={notificationPopupVisible}
+          onClose={() => {
+            setNotificationPopupVisible(false);
+            loadUnreadNotificationCount();
+          }}
+          onNotificationsUpdated={loadUnreadNotificationCount}
+        />
       </View>
 
       {/* Map: ~40% height, user location + 5 nearest outlets, blue markers */}
@@ -231,10 +363,32 @@ const styles = StyleSheet.create({
   headerIcons: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   iconBtn: { padding: 8 },
   iconBtnPressed: { opacity: 0.8 },
+  notifBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  notifBadgeText: {
+    color: Theme.white,
+    fontSize: 11,
+    fontWeight: '700',
+  },
   searchWrap: {
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: Theme.background,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   searchBar: {
     backgroundColor: Theme.inputBg,
@@ -243,7 +397,28 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     minHeight: 48,
     justifyContent: 'center',
+    position: 'relative',
   },
+  searchBarFlex: { flex: 1 },
+  searchBarWithClear: { paddingRight: 40 },
+  clearSearchBtn: {
+    position: 'absolute',
+    right: 12,
+    padding: 4,
+  },
+  clearSearchBtnPressed: { opacity: 0.7 },
+  searchSubmitBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: Layout.radius.lg,
+    minHeight: 48,
+  },
+  searchSubmitBtnPressed: { opacity: 0.9 },
+  filterBtn: { padding: 6 },
+  filterBtnPressed: { opacity: 0.8 },
   mapContainer: {
     width: '100%',
     minHeight: 200,
