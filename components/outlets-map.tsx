@@ -1,4 +1,3 @@
-import { Theme } from '@/constants/theme';
 import type { Outlet } from '@/types/api';
 import React, { useCallback, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -6,11 +5,13 @@ import MapView, { type MapViewProps, Marker } from 'react-native-maps';
 
 import { OutletMarkerCard } from './outlet-marker-card';
 
+const RED_PIN = '#E53935';
+
 type OutletsMapProps = {
   outlets: Outlet[];
   initialRegion?: MapViewProps['initialRegion'];
   style?: MapViewProps['style'];
-  /** Marker pin color (e.g. Theme.primary for blue) */
+  /** Marker pin color (default red) */
   pinColor?: string;
 };
 
@@ -21,7 +22,14 @@ const DEFAULT_REGION = {
   longitudeDelta: 0.05,
 };
 
-export function OutletsMap({ outlets, initialRegion, style, pinColor = Theme.primary }: OutletsMapProps) {
+/** Hide POIs (restaurants, hotels, etc.); keep roads and city/locality names only. */
+const MAP_STYLE_MINIMAL = [
+  { featureType: 'poi', elementType: 'all', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.business', elementType: 'all', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+];
+
+export function OutletsMap({ outlets, initialRegion, style, pinColor = RED_PIN }: OutletsMapProps) {
   const mapRef = useRef<MapView>(null);
   const [selectedOutlet, setSelectedOutlet] = useState<Outlet | null>(null);
 
@@ -40,8 +48,6 @@ export function OutletsMap({ outlets, initialRegion, style, pinColor = Theme.pri
     setSelectedOutlet(outlet);
   }, []);
 
-  if (outlets.length === 0) return null;
-
   return (
     <View style={[styles.container, style]}>
       <MapView
@@ -53,16 +59,28 @@ export function OutletsMap({ outlets, initialRegion, style, pinColor = Theme.pri
         showsMyLocationButton
         showsPointsOfInterest={false}
         showsBuildings={false}
+        customMapStyle={MAP_STYLE_MINIMAL}
       >
-        {outlets.map((outlet) => (
-          <Marker
-            key={outlet.id}
-            coordinate={{ latitude: outlet.latitude, longitude: outlet.longitude }}
-            title={outlet.name}
-            pinColor={pinColor}
-            onPress={() => onMarkerPress(outlet)}
-          />
-        ))}
+        {outlets
+          .filter(
+            (o) =>
+              typeof o.latitude === 'number' &&
+              typeof o.longitude === 'number' &&
+              (o.latitude !== 0 || o.longitude !== 0)
+          )
+          .map((outlet) => (
+            <Marker
+              key={outlet.id}
+              coordinate={{
+                latitude: outlet.latitude,
+                longitude: outlet.longitude,
+              }}
+              title={outlet.name || 'Outlet'}
+              description={outlet.address || ''}
+              pinColor={pinColor}
+              onPress={() => onMarkerPress(outlet)}
+            />
+          ))}
       </MapView>
       {selectedOutlet && (
         <View style={styles.cardContainer} pointerEvents="box-none">

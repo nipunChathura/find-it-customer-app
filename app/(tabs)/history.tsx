@@ -1,11 +1,12 @@
 /**
- * History screen: search history (view previous search results) and route history (view routes to visited outlets).
+ * History screen: search history from API and visited outlets (route history).
  */
 
-import { Layout } from '@/constants/theme';
+import { Layout, Theme } from '@/constants/theme';
 import { useHistory } from '@/contexts/history-context';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { OutletListItem } from '@/components/outlet-list-item';
@@ -24,12 +25,31 @@ function formatDate(ts: number) {
 
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
-  const { searchHistory, visitedOutlets, clearSearchHistory } = useHistory();
+  const {
+    searchHistory,
+    searchHistoryLoading,
+    refreshSearchHistory,
+    deleteSearchHistoryEntry,
+    visitedOutlets,
+    clearSearchHistory,
+  } = useHistory();
   const router = useRouter();
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refreshSearchHistory();
+    setRefreshing(false);
+  }, [refreshSearchHistory]);
 
   return (
     <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Theme.primary} />
+        }
+      >
         {/* Search history */}
         <View style={styles.section}>
           <View style={styles.sectionRow}>
@@ -40,26 +60,66 @@ export default function HistoryScreen() {
               </Pressable>
             )}
           </View>
-          {searchHistory.length === 0 ? (
+          {searchHistoryLoading && searchHistory.length === 0 ? (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator size="small" color={Theme.primary} />
+              <ThemedText style={styles.loadingText}>Loading search history…</ThemedText>
+            </View>
+          ) : searchHistory.length === 0 ? (
             <ThemedText style={styles.emptyText}>No searches yet.</ThemedText>
           ) : (
-            searchHistory.slice(0, 10).map((entry) => (
-              <Pressable
-                key={entry.id}
-                style={({ pressed }) => [styles.historyCard, pressed && styles.pressed]}
-                onPress={() => {
-                  // Navigate to discover with results could be done via state; for simplicity open first outlet if any
-                  if (entry.outlets.length > 0) {
-                    router.push(`/outlet/${entry.outlets[0].id}`);
-                  }
-                }}
-              >
-                <ThemedText type="defaultSemiBold">"{entry.query}"</ThemedText>
-                <ThemedText style={styles.meta}>
-                  {entry.outlets.length} outlet(s) · {formatDate(entry.timestamp)}
-                </ThemedText>
-              </Pressable>
-            ))
+            searchHistory.slice(0, 10).map((entry) => {
+              const label = entry.query ? `"${entry.query}"` : 'Near me';
+              const distanceStr = entry.distanceKm != null ? `${entry.distanceKm} km` : '';
+              const metaParts = [distanceStr, formatDate(entry.timestamp)].filter(Boolean);
+              return (
+                <View key={entry.id} style={styles.historyRow}>
+                  <Pressable
+                    style={({ pressed }) => [styles.historyCard, pressed && styles.pressed]}
+                    onPress={() => {
+                      if (entry.outlets.length > 0) {
+                        const o = entry.outlets[0];
+                        router.push({
+                          pathname: '/outlet/[id]',
+                          params: {
+                            id: o.id,
+                            name: o.name,
+                            address: o.address,
+                            outletType: o.outletType,
+                            latitude: String(o.latitude),
+                            longitude: String(o.longitude),
+                            isOpen: o.isOpen ? '1' : '0',
+                            ...(o.distanceKm != null && { distanceKm: String(o.distanceKm) }),
+                            ...(o.rating != null && { rating: String(o.rating) }),
+                          },
+                        });
+                      } else if (entry.latitude != null && entry.longitude != null) {
+                        router.push({
+                          pathname: '/(tabs)',
+                          params: {
+                            searchLat: String(entry.latitude),
+                            searchLng: String(entry.longitude),
+                            searchDistanceKm: String(entry.distanceKm ?? 5),
+                            searchText: entry.query,
+                          },
+                        });
+                      }
+                    }}
+                  >
+                    <ThemedText type="defaultSemiBold">{label}</ThemedText>
+                    <ThemedText style={styles.meta}>
+                      {metaParts.join(' · ')}
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [styles.deleteHistoryBtn, pressed && styles.pressed]}
+                    onPress={() => deleteSearchHistoryEntry(entry.id)}
+                  >
+                    <ThemedText style={styles.deleteHistoryText}>Delete</ThemedText>
+                  </Pressable>
+                </View>
+              );
+            })
           )}
         </View>
 
@@ -94,14 +154,27 @@ const styles = StyleSheet.create({
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionTitle: { marginBottom: 12 },
   clearBtn: { fontSize: 14 },
+  loadingWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  loadingText: { fontSize: 14, opacity: 0.8 },
   emptyText: { opacity: 0.7, marginTop: 4 },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
   historyCard: {
+    flex: 1,
     padding: 14,
     borderRadius: Layout.radius.md,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.08)',
-    marginBottom: 10,
   },
+  deleteHistoryBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  deleteHistoryText: { color: '#dc2626', fontSize: 14 },
   pressed: { opacity: 0.9 },
   meta: { marginTop: 4, fontSize: 13, opacity: 0.8 },
   visitedRow: { marginBottom: 10 },

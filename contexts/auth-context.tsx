@@ -86,13 +86,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ email, password, name, mobile }),
       }).catch(() => null);
       if (!res?.ok) {
-        // Mock register: persist user and token
-        const mockUser: User = { id: '1', email, name, mobile };
-        const mockToken = 'mock_jwt_' + Date.now();
-        await SecureStore.setItemAsync(TOKEN_KEY, mockToken);
-        await SecureStore.setItemAsync(USER_KEY, JSON.stringify(mockUser));
-        setState({ user: mockUser, token: mockToken, isLoading: false });
-        return;
+        const err = (await res?.json().catch(() => ({}))) as { message?: string };
+        throw new Error(err?.message ?? 'Registration failed');
       }
       const data = (await res.json()) as { token: string; user: User };
       await SecureStore.setItemAsync(TOKEN_KEY, data.token);
