@@ -21,6 +21,8 @@ interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string, mobile: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** Update stored user (e.g. after changing profile image). Persists to SecureStore. */
+  updateUser: (updates: Partial<User>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -56,22 +58,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const data = await customerLogin(email, password);
-    const token = data.token ?? data.accessToken ?? '';
+    const token = data.token ?? '';
     if (!token) throw new Error('Login failed: no token received');
-    const rawUser = data.user;
-    const user: User = rawUser
-      ? {
-          id: String(rawUser.id ?? ''),
-          email: rawUser.email ?? email,
-          name: rawUser.name ?? email.split('@')[0],
-          mobile: rawUser.mobile ?? '',
-        }
-      : {
-          id: '1',
-          email,
-          name: email.split('@')[0],
-          mobile: '',
-        };
+    const fullName = [data.firstName, data.lastName].filter(Boolean).join(' ').trim()
+      || data.username
+      || email.split('@')[0];
+    const user: User = {
+      id: String(data.userId ?? data.customerId ?? ''),
+      email: data.email ?? email,
+      name: fullName,
+      mobile: data.phoneNumber ?? '',
+      profileImageUrl: data.profileImageUrl,
+      userId: data.userId,
+      username: data.username,
+      userStatus: data.userStatus,
+      role: data.role,
+      customerId: data.customerId,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      phoneNumber: data.phoneNumber,
+      nic: data.nic,
+      dob: data.dob,
+      gender: data.gender,
+      countryName: data.countryName,
+      membershipType: data.membershipType,
+      customerStatus: data.customerStatus,
+    };
     await SecureStore.setItemAsync(TOKEN_KEY, token);
     await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
     setState({ user, token, isLoading: false });
@@ -103,7 +115,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState({ user: null, token: null, isLoading: false });
   }, []);
 
-  const value: AuthContextValue = { ...state, login, register, logout };
+  const updateUser = useCallback(async (updates: Partial<User>) => {
+    let nextUser: User | null = null;
+    setState((s) => {
+      if (!s.user) return s;
+      nextUser = { ...s.user, ...updates };
+      return { ...s, user: nextUser };
+    });
+    if (nextUser) await SecureStore.setItemAsync(USER_KEY, JSON.stringify(nextUser));
+  }, []);
+
+  const value: AuthContextValue = { ...state, login, register, logout, updateUser };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

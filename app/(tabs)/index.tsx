@@ -15,13 +15,12 @@ import { OUTLET_TYPE_VALUES } from '@/constants/outlet-types';
 import { Layout, Theme } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
 import { useFavorites } from '@/contexts/favorites-context';
-import { useHistory } from '@/contexts/history-context';
 import { api } from '@/services/api';
-import { getFindItCategories, getNearestOutlets, getNotifications, saveSearchHistory } from '@/services/customer-api';
+import { getFindItCategories, getNotifications } from '@/services/customer-api';
 import type { ItemCategory, Outlet } from '@/types/api';
 import { Image } from 'expo-image';
 import * as Location from 'expo-location';
-import { useFocusEffect, useGlobalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -29,7 +28,6 @@ import {
   FlatList,
   Keyboard,
   Pressable,
-  RefreshControl,
   StyleSheet,
   View,
 } from 'react-native';
@@ -40,16 +38,9 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const { logout, token, user } = useAuth();
-  const { isFavorite, addFavorite, removeFavoriteByOutletId } = useFavorites();
-  const { refreshSearchHistory } = useHistory();
+  const { isFavorite, toggleFavorite } = useFavorites();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const searchParams = useGlobalSearchParams<{
-    searchLat?: string;
-    searchLng?: string;
-    searchDistanceKm?: string;
-    searchText?: string;
-  }>();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [outlets, setOutlets] = useState<Outlet[]>([]);
@@ -62,61 +53,25 @@ export default function HomeScreen() {
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [notificationPopupVisible, setNotificationPopupVisible] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
 
   const fetchNearest = useCallback(
-    async (
-      query: string,
-      lat?: number,
-      lng?: number,
-      filterState?: FilterState,
-      isRefresh = false,
-      saveToHistory = false
-    ) => {
-      if (!isRefresh) setLoading(true);
-      else setRefreshing(true);
-      const distanceKm = filterState?.maxDistanceKm ?? 10;
-      const outletType = filterState?.outletType ?? null;
+    async (query: string, lat?: number, lng?: number, filterState?: FilterState) => {
+      setLoading(true);
       try {
-        if (token && lat != null && lng != null) {
-          const list = await getNearestOutlets(token, {
-            latitude: lat,
-            longitude: lng,
-            itemName: query.trim(),
-            distanceKm,
-            categoryId: null,
-            outletType,
-          });
-          setOutlets(list);
-          const hasSearchValue = query.trim() !== '';
-          if (saveToHistory && hasSearchValue) {
-            await saveSearchHistory(token, {
-              searchText: query.trim(),
-              latitude: lat,
-              longitude: lng,
-              distanceKm,
-              categoryId: null,
-              outletType,
-            });
-            refreshSearchHistory();
-          }
-        } else {
-          const opts = {
-            category: filterState?.category,
-            outletType: filterState?.outletType,
-            maxDistanceKm: filterState?.maxDistanceKm ?? 1,
-          };
-          const list = await api.searchNearestOutlets(query, lat, lng, opts);
-          setOutlets(list);
-        }
+        const opts = {
+          category: filterState?.category,
+          outletType: filterState?.outletType,
+          maxDistanceKm: filterState?.maxDistanceKm ?? 1,
+        };
+        const list = await api.searchNearestOutlets(query, lat, lng, opts);
+        setOutlets(list);
       } catch (e) {
         setOutlets([]);
       } finally {
-        if (!isRefresh) setLoading(false);
-        else setRefreshing(false);
+        setLoading(false);
       }
     },
-    [token, refreshSearchHistory]
+    []
   );
 
   const loadUnreadNotificationCount = useCallback(async () => {
@@ -131,24 +86,6 @@ export default function HomeScreen() {
     }
   }, [token, user?.userId]);
 
-  const onRefresh = useCallback(async () => {
-    let lat = location?.lat;
-    let lng = location?.lng;
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        lat = pos.coords.latitude;
-        lng = pos.coords.longitude;
-        setLocation({ lat, lng });
-      }
-    } catch {
-      // keep previous location
-    }
-    await fetchNearest(searchQuery.trim(), lat, lng, filters, true, false);
-    loadUnreadNotificationCount();
-  }, [location, searchQuery, filters, fetchNearest, loadUnreadNotificationCount]);
-
   useEffect(() => {
     loadUnreadNotificationCount();
   }, [loadUnreadNotificationCount]);
@@ -157,22 +94,6 @@ export default function HomeScreen() {
     useCallback(() => {
       loadUnreadNotificationCount();
     }, [loadUnreadNotificationCount])
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      const lat = searchParams.searchLat != null ? parseFloat(searchParams.searchLat) : NaN;
-      const lng = searchParams.searchLng != null ? parseFloat(searchParams.searchLng) : NaN;
-      if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
-        const distanceKm = searchParams.searchDistanceKm != null ? parseFloat(searchParams.searchDistanceKm) : 5;
-        const query = searchParams.searchText ?? '';
-        setSearchQuery(query);
-        setFilters((f) => ({ ...f, maxDistanceKm: distanceKm }));
-        setLocation({ lat, lng });
-        fetchNearest(query, lat, lng, { maxDistanceKm: distanceKm }, false, false);
-        router.replace('/(tabs)');
-      }
-    }, [searchParams.searchLat, searchParams.searchLng, searchParams.searchDistanceKm, searchParams.searchText, fetchNearest, router])
   );
 
   useEffect(() => {
@@ -246,14 +167,14 @@ export default function HomeScreen() {
 
   const handleSearchSubmit = useCallback(() => {
     Keyboard.dismiss();
-    fetchNearest(searchQuery.trim(), location?.lat, location?.lng, filters, false, true);
+    fetchNearest(searchQuery.trim(), location?.lat, location?.lng, filters);
   }, [searchQuery, location, filters, fetchNearest]);
 
   const handleApplyFilters = useCallback(
     (newFilters: FilterState) => {
       setFilters(newFilters);
       setFilterSheetVisible(false);
-      fetchNearest(searchQuery.trim(), location?.lat, location?.lng, newFilters, false, true);
+      fetchNearest(searchQuery.trim(), location?.lat, location?.lng, newFilters);
     },
     [searchQuery, location, fetchNearest]
   );
@@ -279,18 +200,14 @@ export default function HomeScreen() {
     <ThemedView style={styles.container}>
       {/* Header: #2563EB, logo left, "Find It" center, white icons right */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <Pressable
-          style={({ pressed }) => [styles.headerLeft, pressed && styles.iconBtnPressed]}
-          onPress={onRefresh}
-          accessibilityLabel="Reload"
-        >
+        <View style={styles.headerLeft}>
           <Image
             source={require('@/assets/images/logo.png')}
             style={styles.logo}
             contentFit="contain"
           />
           <ThemedText style={styles.headerTitle}>Find It</ThemedText>
-        </Pressable>
+        </View>
         <View style={styles.headerIcons}>
           <Pressable
             style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
@@ -387,7 +304,7 @@ export default function HomeScreen() {
             outlets={outlets}
             initialRegion={initialRegion}
             style={StyleSheet.absoluteFill}
-            pinColor="#E53935"
+            pinColor={Theme.primary}
           />
         )}
       </View>
@@ -401,40 +318,24 @@ export default function HomeScreen() {
           <ThemedText style={styles.locationHint}>{locationError}</ThemedText>
         ) : null}
       </View>
-      <FlatList
-        data={outlets}
-        keyExtractor={(o) => o.id}
-        contentContainerStyle={outlets.length === 0 ? styles.listContentEmpty : styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[Theme.primary]}
-            tintColor={Theme.primary}
-          />
-        }
-        ListEmptyComponent={
-          loading && outlets.length === 0 ? (
-            <View style={styles.loadingList}>
-              <ActivityIndicator size="small" color={Theme.primary} />
-            </View>
-          ) : !loading && outlets.length === 0 ? (
-            <View style={styles.emptyList}>
-              <ThemedText style={styles.emptyListText}>No outlets found.</ThemedText>
-              <ThemedText style={styles.emptyListHint}>Try a different search or adjust filters.</ThemedText>
-            </View>
-          ) : null
-        }
-        renderItem={({ item }) => (
-          <HomeOutletCard
-            outlet={item}
-            isFavorite={isFavorite(item.id)}
-            onAddFavorite={addFavorite}
-            onRemoveFavorite={removeFavoriteByOutletId}
-          />
-        )}
-      />
-
+      {loading && outlets.length === 0 ? (
+        <View style={styles.loadingList}>
+          <ActivityIndicator size="small" color={Theme.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={outlets}
+          keyExtractor={(o) => o.id}
+          contentContainerStyle={styles.listContent}
+          renderItem={({ item }) => (
+            <HomeOutletCard
+              outlet={item}
+              isFavorite={isFavorite(item.id)}
+              onToggleFavorite={() => toggleFavorite(item)}
+            />
+          )}
+        />
+      )}
     </ThemedView>
   );
 }
@@ -540,23 +441,7 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
   },
-  emptyList: {
-    padding: 32,
-    alignItems: 'center',
-  },
-  emptyListText: {
-    fontSize: 16,
-    marginBottom: 8,
-  },
-  emptyListHint: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
   listContent: {
-    paddingBottom: 24,
-  },
-  listContentEmpty: {
-    flexGrow: 1,
     paddingBottom: 24,
   },
 });

@@ -81,10 +81,15 @@ export default function DiscoverScreen() {
           onSubmit={runSearch}
         />
         <Pressable
-          style={({ pressed }) => [styles.searchBtn, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.searchBtn, pressed && styles.pressed, loading && styles.searchBtnDisabled]}
           onPress={runSearch}
+          disabled={loading}
         >
-          <IconSymbol name="magnifyingglass" size={22} color="#fff" />
+          {loading ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <IconSymbol name="magnifyingglass" size={22} color="#fff" />
+          )}
         </Pressable>
       </View>
 
@@ -167,6 +172,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pressed: { opacity: 0.9 },
+  searchBtnDisabled: { opacity: 0.7 },
   banner: { backgroundColor: 'rgba(59, 130, 246, 0.15)', paddingVertical: 8, paddingHorizontal: 16 },
   bannerText: { fontSize: 13, textAlign: 'center' },
   centered: {
