@@ -1,4 +1,6 @@
 {
+  "git.enabled": true,
+  "git.autorefresh": true,
   "editor.codeActionsOnSave": {
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",

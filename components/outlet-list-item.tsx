@@ -35,7 +35,22 @@ export function OutletListItem({ outlet }: OutletListItemProps) {
         Layout.shadow.sm,
         pressed && styles.pressed,
       ]}
-      onPress={() => router.push(`/outlet/${outlet.id}`)}
+      onPress={() =>
+        router.push({
+          pathname: '/outlet/[id]',
+          params: {
+            id: outlet.id,
+            name: outlet.name,
+            address: outlet.address,
+            outletType: outlet.outletType,
+            latitude: String(outlet.latitude),
+            longitude: String(outlet.longitude),
+            isOpen: outlet.isOpen ? '1' : '0',
+            ...(outlet.distanceKm != null && { distanceKm: String(outlet.distanceKm) }),
+            ...(outlet.rating != null && { rating: String(outlet.rating) }),
+          },
+        })
+      }
     >
       <View style={styles.row}>
         <ThemedText type="defaultSemiBold" style={styles.name} numberOfLines={1}>

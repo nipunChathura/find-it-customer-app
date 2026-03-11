@@ -1,21 +1,36 @@
 /**
- * HistoryContext – Search history and visited outlets (route history).
- * Persisted per user; allows viewing previous search results and routes to visited outlets.
+ * HistoryContext – Search history from API (GET /customer-app/search-history), visited outlets in local storage.
  */
 
+import {
+    deleteSearchHistoryEntry as deleteSearchHistoryEntryApi,
+    getSearchHistory,
+    saveSearchHistory,
+} from '@/services/customer-api';
 import type { Outlet, SearchHistoryEntry, VisitedOutletEntry } from '@/types/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 import { useAuth } from './auth-context';
 
-const SEARCH_HISTORY_KEY = 'findit_search_history';
 const VISITED_KEY = 'findit_visited';
+
+export interface SearchHistoryParams {
+  latitude: number;
+  longitude: number;
+  distanceKm: number;
+  categoryId?: string | null;
+  outletType?: string | null;
+}
 
 interface HistoryContextValue {
   searchHistory: SearchHistoryEntry[];
+  searchHistoryLoading: boolean;
+  clearSearchHistoryLoading: boolean;
+  refreshSearchHistory: () => Promise<void>;
+  deleteSearchHistoryEntry: (id: string) => Promise<void>;
   visitedOutlets: VisitedOutletEntry[];
-  addSearchHistory: (query: string, outlets: Outlet[]) => Promise<void>;
+  addSearchHistory: (query: string, outlets: Outlet[], params?: SearchHistoryParams) => Promise<void>;
   addVisitedOutlet: (outlet: Outlet) => Promise<void>;
   clearSearchHistory: () => Promise<void>;
   getSearchEntry: (id: string) => SearchHistoryEntry | undefined;
@@ -23,27 +38,34 @@ interface HistoryContextValue {
 
 const HistoryContext = createContext<HistoryContextValue | null>(null);
 
-function genId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
-}
-
 export function HistoryProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { token, user } = useAuth();
   const [searchHistory, setSearchHistory] = useState<SearchHistoryEntry[]>([]);
+  const [searchHistoryLoading, setSearchHistoryLoading] = useState(false);
+  const [clearSearchHistoryLoading, setClearSearchHistoryLoading] = useState(false);
   const [visitedOutlets, setVisitedOutlets] = useState<VisitedOutletEntry[]>([]);
 
-  const searchKey = user ? `${SEARCH_HISTORY_KEY}_${user.id}` : null;
   const visitedKey = user ? `${VISITED_KEY}_${user.id}` : null;
 
-  useEffect(() => {
-    if (!searchKey) {
+  const refreshSearchHistory = useCallback(async () => {
+    if (!token) {
       setSearchHistory([]);
       return;
     }
-    AsyncStorage.getItem(searchKey)
-      .then((json) => (json ? setSearchHistory(JSON.parse(json)) : undefined))
-      .catch(() => {});
-  }, [searchKey]);
+    setSearchHistoryLoading(true);
+    try {
+      const list = await getSearchHistory(token);
+      setSearchHistory(list);
+    } catch {
+      setSearchHistory([]);
+    } finally {
+      setSearchHistoryLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    refreshSearchHistory();
+  }, [refreshSearchHistory]);
 
   useEffect(() => {
     if (!visitedKey) {
@@ -56,24 +78,30 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
   }, [visitedKey]);
 
   useEffect(() => {
-    if (!searchKey || searchHistory.length === 0) return;
-    AsyncStorage.setItem(searchKey, JSON.stringify(searchHistory)).catch(() => {});
-  }, [searchKey, searchHistory]);
-
-  useEffect(() => {
     if (!visitedKey || visitedOutlets.length === 0) return;
     AsyncStorage.setItem(visitedKey, JSON.stringify(visitedOutlets)).catch(() => {});
   }, [visitedKey, visitedOutlets]);
 
-  const addSearchHistory = useCallback(async (query: string, outlets: Outlet[]) => {
-    const entry: SearchHistoryEntry = {
-      id: genId(),
-      query,
-      outlets,
-      timestamp: Date.now(),
-    };
-    setSearchHistory((prev) => [entry, ...prev.slice(0, 49)]);
-  }, []);
+  const addSearchHistory = useCallback(
+    async (query: string, _outlets: Outlet[], params?: SearchHistoryParams) => {
+      const searchText = query?.trim();
+      if (!searchText || !token || !params) return;
+      try {
+        await saveSearchHistory(token, {
+          searchText,
+          latitude: params.latitude,
+          longitude: params.longitude,
+          distanceKm: params.distanceKm,
+          categoryId: params.categoryId ?? null,
+          outletType: params.outletType ?? null,
+        });
+        await refreshSearchHistory();
+      } catch {
+        // ignore save failure
+      }
+    },
+    [token, refreshSearchHistory]
+  );
 
   const addVisitedOutlet = useCallback(async (outlet: Outlet) => {
     setVisitedOutlets((prev) => [
@@ -82,7 +110,41 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
     ].slice(0, 49));
   }, []);
 
-  const clearSearchHistory = useCallback(async () => setSearchHistory([]), []);
+  const clearSearchHistory = useCallback(async () => {
+    if (!token) return;
+    const list = [...searchHistory];
+    if (list.length === 0) {
+      setSearchHistory([]);
+      return;
+    }
+    setClearSearchHistoryLoading(true);
+    try {
+      for (const entry of list) {
+        try {
+          await deleteSearchHistoryEntryApi(token, String(entry.id));
+        } catch {
+          // continue with rest
+        }
+      }
+      setSearchHistory([]);
+    } finally {
+      setClearSearchHistoryLoading(false);
+    }
+  }, [token, searchHistory]);
+
+  const deleteSearchHistoryEntry = useCallback(
+    async (id: string) => {
+      if (!token) return;
+      const idStr = String(id);
+      try {
+        await deleteSearchHistoryEntryApi(token, idStr);
+        setSearchHistory((prev) => prev.filter((e) => String(e.id) !== idStr));
+      } catch {
+        await refreshSearchHistory();
+      }
+    },
+    [token, refreshSearchHistory]
+  );
 
   const getSearchEntry = useCallback(
     (id: string) => searchHistory.find((e) => e.id === id),
@@ -91,6 +153,10 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
 
   const value: HistoryContextValue = {
     searchHistory,
+    searchHistoryLoading,
+    clearSearchHistoryLoading,
+    refreshSearchHistory,
+    deleteSearchHistoryEntry,
     visitedOutlets,
     addSearchHistory,
     addVisitedOutlet,

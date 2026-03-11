@@ -9,13 +9,24 @@
 import type { Item, ItemCategory, Outlet, OutletType, RouteInfo, SearchParams } from '@/types/api';
 
 const BASE_URL = 'https://your-api.com/api'; // Replace with your API base URL
+const REQUEST_TIMEOUT_MS = 30_000;
+
+async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(id);
+  }
+}
 
 async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = `${BASE_URL}${endpoint}`;
   const method = options?.method ?? 'GET';
   const body = options?.body;
   console.log('[API] Request:', method, url, body ? (typeof body === 'string' ? body : '[body]') : '');
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     ...options,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
   });
@@ -55,16 +66,27 @@ export async function getOpenOutletsForItem(itemId: string): Promise<Outlet[]> {
   return fetchApi<Outlet[]>(`/items/${itemId}/outlets?open=true`);
 }
 
-/** Search and return 5 nearest outlets (with distance, rating) for map + list */
+/** Options for nearest-outlet search (category + max distance in km) */
+export interface SearchNearestOptions {
+  category?: ItemCategory;
+  outletType?: OutletType;
+  maxDistanceKm?: number;
+}
+
+/** Search and return nearest outlets (with distance, rating) within maxDistanceKm; optional category/outletType filter */
 export async function searchNearestOutlets(
   query: string,
   userLat?: number,
-  userLng?: number
+  userLng?: number,
+  options?: SearchNearestOptions
 ): Promise<Outlet[]> {
   const q = new URLSearchParams();
   q.set('q', query);
   if (userLat != null) q.set('lat', String(userLat));
   if (userLng != null) q.set('lng', String(userLng));
+  if (options?.category) q.set('category', options.category);
+  if (options?.outletType) q.set('outletType', options.outletType);
+  if (options?.maxDistanceKm != null) q.set('maxDistanceKm', String(options.maxDistanceKm));
   return fetchApi<Outlet[]>(`/search/nearest?${q.toString()}`);
 }
 
@@ -80,39 +102,7 @@ export async function getRoute(
   );
 }
 
-// ——— Mock implementation (dummy outlets with lat/lng, rating, distance) ———
-
-const MOCK_CATEGORIES: ItemCategory[] = ['Electronics', 'Groceries', 'Pharmacy', 'Fashion', 'Home'];
-const MOCK_OUTLET_TYPES: OutletType[] = ['Retail', 'Supermarket', 'Convenience', 'Mall', 'Kiosk'];
-
-const MOCK_ITEMS: Item[] = [
-  { id: '1', name: 'Wireless Earbuds', category: 'Electronics', availability: 'Yes' },
-  { id: '2', name: 'Organic Milk 1L', category: 'Groceries', availability: 'Yes' },
-  { id: '3', name: 'Vitamin C Tablets', category: 'Pharmacy', availability: 'No' },
-  { id: '4', name: 'USB-C Cable', category: 'Electronics', availability: 'Yes' },
-  { id: '5', name: 'Whole Grain Bread', category: 'Groceries', availability: 'Yes' },
-  { id: '6', name: 'Hand Sanitizer', category: 'Pharmacy', availability: 'Yes' },
-  { id: '7', name: 'Cotton T-Shirt', category: 'Fashion', availability: 'No' },
-  { id: '8', name: 'LED Desk Lamp', category: 'Electronics', availability: 'Yes' },
-];
-
-/** Dummy outlets with lat/lng for map; used for nearest search and item-outlet mapping */
-const MOCK_OUTLETS_POOL: Outlet[] = [
-  { id: 'o1', name: 'Tech Haven', outletType: 'Retail', address: '123 Main St, Colombo', latitude: 6.9271, longitude: 79.8612, isOpen: true, distanceKm: 1.2, rating: 4.5 },
-  { id: 'o2', name: 'Gadget Mall', outletType: 'Mall', address: '456 Oak Ave, Colombo', latitude: 6.9300, longitude: 79.8700, isOpen: true, distanceKm: 2.5, rating: 4.2 },
-  { id: 'o3', name: 'Fresh Mart', outletType: 'Supermarket', address: '789 Market Rd', latitude: 6.9280, longitude: 79.8650, isOpen: true, distanceKm: 0.8, rating: 4.8 },
-  { id: 'o4', name: 'Health Plus', outletType: 'Pharmacy', address: '321 Health St', latitude: 6.9250, longitude: 79.8580, isOpen: true, distanceKm: 1.5, rating: 4.6 },
-  { id: 'o5', name: 'City Central', outletType: 'Mall', address: '100 Central Blvd', latitude: 6.9320, longitude: 79.8480, isOpen: true, distanceKm: 3.0, rating: 4.0 },
-  { id: 'o6', name: 'Quick Stop', outletType: 'Convenience', address: '55 Park Lane', latitude: 6.9200, longitude: 79.8550, isOpen: true, distanceKm: 1.8, rating: 3.9 },
-];
-
-const MOCK_OUTLETS: Record<string, Outlet[]> = {
-  '1': [MOCK_OUTLETS_POOL[0], MOCK_OUTLETS_POOL[1]],
-  '2': [MOCK_OUTLETS_POOL[2]],
-  '4': [MOCK_OUTLETS_POOL[0]],
-  '6': [MOCK_OUTLETS_POOL[3]],
-  '8': [MOCK_OUTLETS_POOL[0]],
-};
+// ——— Mock implementation (no dummy data: returns empty lists; getRoute uses haversine for distance) ———
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -142,76 +132,53 @@ export const api = {
   getCategories: () => (USE_MOCK ? mockApi.getCategories() : getCategories()),
   getOutletTypes: () => (USE_MOCK ? mockApi.getOutletTypes() : getOutletTypes()),
   getOpenOutletsForItem: (itemId: string) => (USE_MOCK ? mockApi.getOpenOutletsForItem(itemId) : getOpenOutletsForItem(itemId)),
-  searchNearestOutlets: (q: string, lat?: number, lng?: number) =>
-    USE_MOCK ? mockApi.searchNearestOutlets(q, lat, lng) : searchNearestOutlets(q, lat, lng),
+  searchNearestOutlets: (q: string, lat?: number, lng?: number, opts?: SearchNearestOptions) =>
+    USE_MOCK ? mockApi.searchNearestOutlets(q, lat, lng, opts) : searchNearestOutlets(q, lat, lng, opts),
   getRoute: (a: number, b: number, c: number, d: number) =>
     USE_MOCK ? mockApi.getRoute(a, b, c, d) : getRoute(a, b, c, d),
 };
 
 export const mockApi = {
-  async searchItems(params: SearchParams): Promise<Item[]> {
-    console.log('[API] Request (mock): searchItems', params);
-    await delay(600);
-    let list = [...MOCK_ITEMS];
-    if (params.query?.trim()) {
-      const q = params.query.toLowerCase();
-      list = list.filter((i) => i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q));
-    }
-    if (params.category) list = list.filter((i) => i.category === params.category);
-    console.log('[API] Response (mock): searchItems', list.length, 'items', list);
-    return list;
+  async searchItems(_params: SearchParams): Promise<Item[]> {
+    console.log('[API] Request (mock): searchItems');
+    await delay(300);
+    return [];
   },
   async getCategories(): Promise<ItemCategory[]> {
     console.log('[API] Request (mock): getCategories');
     await delay(200);
-    console.log('[API] Response (mock): getCategories', MOCK_CATEGORIES);
-    return MOCK_CATEGORIES;
+    return [];
   },
   async getOutletTypes(): Promise<OutletType[]> {
     console.log('[API] Request (mock): getOutletTypes');
     await delay(200);
-    console.log('[API] Response (mock): getOutletTypes', MOCK_OUTLET_TYPES);
-    return MOCK_OUTLET_TYPES;
+    return [];
   },
-  async getOpenOutletsForItem(itemId: string): Promise<Outlet[]> {
-    console.log('[API] Request (mock): getOpenOutletsForItem', { itemId });
-    await delay(500);
-    const out = MOCK_OUTLETS[itemId] ?? [];
-    console.log('[API] Response (mock): getOpenOutletsForItem', out.length, 'outlets', out);
-    return out;
+  async getOpenOutletsForItem(_itemId: string): Promise<Outlet[]> {
+    console.log('[API] Request (mock): getOpenOutletsForItem');
+    await delay(300);
+    return [];
   },
-  /** Returns 5 nearest outlets for the search query; sorts by distance from user if lat/lng provided */
   async searchNearestOutlets(
-    query: string,
-    userLat?: number,
-    userLng?: number
+    _query: string,
+    _userLat?: number,
+    _userLng?: number,
+    _options?: { category?: ItemCategory; outletType?: OutletType; maxDistanceKm?: number }
   ): Promise<Outlet[]> {
-    console.log('[API] Request (mock): searchNearestOutlets', { query, userLat, userLng });
-    await delay(600);
-    const base = userLat != null && userLng != null
-      ? [...MOCK_OUTLETS_POOL].map((o) => ({
-          ...o,
-          distanceKm: haversineKm(userLat, userLng, o.latitude, o.longitude),
-        }))
-      : MOCK_OUTLETS_POOL.map((o) => ({ ...o, distanceKm: o.distanceKm ?? 0 }));
-    base.sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
-    const result = base.slice(0, 5);
-    console.log('[API] Response (mock): searchNearestOutlets', result.length, 'outlets', result);
-    return result;
+    console.log('[API] Request (mock): searchNearestOutlets');
+    await delay(400);
+    return [];
   },
-  /** Returns estimated distance (km) and duration (minutes) for route */
   async getRoute(
     fromLat: number,
     fromLng: number,
     toLat: number,
     toLng: number
   ): Promise<RouteInfo> {
-    console.log('[API] Request (mock): getRoute', { fromLat, fromLng, toLat, toLng });
-    await delay(400);
+    console.log('[API] Request (mock): getRoute');
+    await delay(200);
     const distanceKm = haversineKm(fromLat, fromLng, toLat, toLng);
-    const durationMinutes = Math.max(1, Math.round((distanceKm / 30) * 60)); // ~30 km/h avg
-    const result = { distanceKm, durationMinutes };
-    console.log('[API] Response (mock): getRoute', result);
-    return result;
+    const durationMinutes = Math.max(1, Math.round((distanceKm / 30) * 60));
+    return { distanceKm, durationMinutes };
   },
 };
