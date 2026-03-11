@@ -1,82 +1,105 @@
 /**
- * FavoritesContext – Persisted list of favorite outlets per user.
- * Add/remove favorites; list is stored in AsyncStorage and restored on load.
+ * FavoritesContext – Favorites from API (GET /customer-app/favorites).
+ * Each entry has outlet, customer_favorite_id (for DELETE), and optional nickname.
  */
 
-import type { Outlet } from '@/types/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { addFavoriteOutlet, getFavorites, removeFavoriteOutlet } from '@/services/customer-api';
+import type { FavoriteEntry, Outlet } from '@/types/api';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 import { useAuth } from './auth-context';
 
-const STORAGE_KEY = 'findit_favorites';
-
 interface FavoritesContextValue {
-  favorites: Outlet[];
+  favorites: FavoriteEntry[];
+  loading: boolean;
+  refreshFavorites: () => Promise<void>;
   isFavorite: (outletId: string) => boolean;
-  addFavorite: (outlet: Outlet) => Promise<void>;
-  removeFavorite: (outletId: string) => Promise<void>;
-  toggleFavorite: (outlet: Outlet) => Promise<void>;
+  getFavoriteEntry: (outletId: string) => FavoriteEntry | undefined;
+  addFavorite: (outlet: Outlet, nickname: string) => Promise<void>;
+  removeFavorite: (customer_favorite_id: number) => Promise<void>;
+  removeFavoriteByOutletId: (outletId: string) => Promise<void>;
 }
 
 const FavoritesContext = createContext<FavoritesContextValue | null>(null);
 
 export function FavoritesProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
-  const [favorites, setFavorites] = useState<Outlet[]>([]);
+  const { token } = useAuth();
+  const [favorites, setFavorites] = useState<FavoriteEntry[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const key = user ? `${STORAGE_KEY}_${user.id}` : null;
-
-  useEffect(() => {
-    if (!key) {
+  const refreshFavorites = useCallback(async () => {
+    if (!token) {
       setFavorites([]);
       return;
     }
-    AsyncStorage.getItem(key)
-      .then((json) => {
-        if (json) setFavorites(JSON.parse(json));
-      })
-      .catch(() => setFavorites([]));
-  }, [key]);
+    setLoading(true);
+    try {
+      const list = await getFavorites(token);
+      setFavorites(list);
+    } catch {
+      setFavorites([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
 
   useEffect(() => {
-    if (!key || favorites.length === 0) return;
-    AsyncStorage.setItem(key, JSON.stringify(favorites)).catch(() => {});
-  }, [key, favorites]);
+    refreshFavorites();
+  }, [refreshFavorites]);
 
   const isFavorite = useCallback(
-    (outletId: string) => favorites.some((o) => o.id === outletId),
+    (outletId: string) => favorites.some((e) => e.outlet.id === outletId),
+    [favorites]
+  );
+
+  const getFavoriteEntry = useCallback(
+    (outletId: string) => favorites.find((e) => e.outlet.id === outletId),
     [favorites]
   );
 
   const addFavorite = useCallback(
-    async (outlet: Outlet) =>
-      setFavorites((prev) => (prev.some((o) => o.id === outlet.id) ? prev : [...prev, outlet])),
-    []
+    async (outlet: Outlet, nickname: string) => {
+      if (!token) return;
+      try {
+        await addFavoriteOutlet(token, outlet.id, nickname.trim() || outlet.name);
+        await refreshFavorites();
+      } catch {
+        refreshFavorites();
+      }
+    },
+    [token, refreshFavorites]
   );
 
   const removeFavorite = useCallback(
-    async (outletId: string) =>
-      setFavorites((prev) => prev.filter((o) => o.id !== outletId)),
-    []
+    async (customer_favorite_id: number) => {
+      if (!token) return;
+      try {
+        await removeFavoriteOutlet(token, customer_favorite_id);
+        setFavorites((prev) => prev.filter((e) => e.customer_favorite_id !== customer_favorite_id));
+      } catch {
+        refreshFavorites();
+      }
+    },
+    [token, refreshFavorites]
   );
 
-  const toggleFavorite = useCallback(
-    async (outlet: Outlet) =>
-      setFavorites((prev) =>
-        prev.some((o) => o.id === outlet.id)
-          ? prev.filter((o) => o.id !== outlet.id)
-          : [...prev, outlet]
-      ),
-    []
+  const removeFavoriteByOutletId = useCallback(
+    async (outletId: string) => {
+      const entry = favorites.find((e) => e.outlet.id === outletId);
+      if (entry) await removeFavorite(entry.customer_favorite_id);
+    },
+    [favorites, removeFavorite]
   );
 
   const value: FavoritesContextValue = {
     favorites,
+    loading,
+    refreshFavorites,
     isFavorite,
+    getFavoriteEntry,
     addFavorite,
     removeFavorite,
-    toggleFavorite,
+    removeFavoriteByOutletId,
   };
   return (
     <FavoritesContext.Provider value={value}>{children}</FavoritesContext.Provider>

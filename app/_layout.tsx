@@ -41,6 +41,7 @@ function RootStack() {
         <Stack.Screen name="outlet/[id]" options={{ headerShown: true, title: 'Outlet' }} />
         <Stack.Screen name="feedback/[id]" options={{ headerShown: true, title: 'Feedback' }} />
         <Stack.Screen name="notifications" options={{ headerShown: true, title: 'Notifications' }} />
+        <Stack.Screen name="route" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="dark" />
     </>

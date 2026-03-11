@@ -18,11 +18,13 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  'chevron.left': 'chevron-left',
   'magnifyingglass': 'search',
   'line.3.horizontal.decrease.circle': 'filter-list',
   'line.3.horizontal.decrease.circle.fill': 'filter-list',
   'list.bullet': 'list',
   'map': 'map',
+  'map.fill': 'map',
   'heart.fill': 'favorite',
   'clock.fill': 'schedule',
   'bell.fill': 'notifications',
@@ -30,6 +32,12 @@ const MAPPING = {
   'rectangle.portrait.and.arrow.right': 'exit-to-app',
   'eye': 'visibility',
   'eye.slash': 'visibility-off',
+  'car.fill': 'directions-car',
+  'bicycle': 'directions-bike',
+  'figure.walk': 'directions-walk',
+  'tag.fill': 'local-offer',
+  'xmark.circle.fill': 'cancel',
+  'lock.fill': 'lock',
 } as IconMapping;
 
 /**

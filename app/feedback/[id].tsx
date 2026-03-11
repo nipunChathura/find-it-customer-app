@@ -1,9 +1,8 @@
 /**
- * Feedback form for an outlet: rating and comment. Submits to API (or mock).
+ * Feedback form for an outlet: rating and comment. Pass outletId and optionally outletName via params.
  */
 
 import { Layout } from '@/constants/theme';
-import type { Outlet } from '@/types/api';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -12,23 +11,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedTextInput } from '@/components/themed-text-input';
 import { ThemedView } from '@/components/themed-view';
 
-const DUMMY_OUTLETS: Outlet[] = [
-  { id: 'o1', name: 'Tech Haven', outletType: 'Retail', address: '123 Main St, Colombo', latitude: 6.9271, longitude: 79.8612, isOpen: true },
-  { id: 'o2', name: 'Gadget Mall', outletType: 'Mall', address: '456 Oak Ave, Colombo', latitude: 6.9300, longitude: 79.8700, isOpen: true },
-  { id: 'o3', name: 'Fresh Mart', outletType: 'Supermarket', address: '789 Market Rd', latitude: 6.9280, longitude: 79.8650, isOpen: true },
-  { id: 'o4', name: 'Health Plus', outletType: 'Pharmacy', address: '321 Health St', latitude: 6.9250, longitude: 79.8580, isOpen: true },
-  { id: 'o5', name: 'City Central', outletType: 'Mall', address: '100 Central Blvd', latitude: 6.9320, longitude: 79.8480, isOpen: true },
-  { id: 'o6', name: 'Quick Stop', outletType: 'Convenience', address: '55 Park Lane', latitude: 6.9200, longitude: 79.8550, isOpen: true },
-];
-
-function getOutletById(id: string): Outlet | undefined {
-  return DUMMY_OUTLETS.find((o) => o.id === id);
-}
-
 export default function FeedbackScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, outletName } = useLocalSearchParams<{ id: string; outletName?: string }>();
   const router = useRouter();
-  const outlet = id ? getOutletById(id) : undefined;
+  const title = outletName ?? 'Outlet';
+  const outletId = id ?? '';
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -39,10 +26,10 @@ export default function FeedbackScreen() {
     setTimeout(() => router.back(), 1500);
   };
 
-  if (!outlet) {
+  if (!outletId) {
     return (
       <ThemedView style={styles.container}>
-        <ThemedText style={styles.empty}>Outlet not found.</ThemedText>
+        <ThemedText style={styles.empty}>No outlet selected.</ThemedText>
       </ThemedView>
     );
   }
@@ -58,7 +45,7 @@ export default function FeedbackScreen() {
   return (
     <ThemedView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ThemedText type="subtitle" style={styles.title}>{outlet.name}</ThemedText>
+        <ThemedText type="subtitle" style={styles.title}>{title}</ThemedText>
         <ThemedText style={styles.hint}>Your feedback helps us improve.</ThemedText>
 
         <ThemedText type="defaultSemiBold" style={styles.label}>Rating (1–5)</ThemedText>

@@ -15,21 +15,23 @@ import { OUTLET_TYPE_VALUES } from '@/constants/outlet-types';
 import { Layout, Theme } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
 import { useFavorites } from '@/contexts/favorites-context';
+import { useHistory } from '@/contexts/history-context';
 import { api } from '@/services/api';
-import { getFindItCategories, getNotifications } from '@/services/customer-api';
+import { getFindItCategories, getNearestOutlets, getNotifications } from '@/services/customer-api';
 import type { ItemCategory, Outlet } from '@/types/api';
 import { Image } from 'expo-image';
 import * as Location from 'expo-location';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Dimensions,
-  FlatList,
-  Keyboard,
-  Pressable,
-  StyleSheet,
-  View,
+    ActivityIndicator,
+    Dimensions,
+    FlatList,
+    Keyboard,
+    Pressable,
+    RefreshControl,
+    StyleSheet,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -38,7 +40,8 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const { logout, token, user } = useAuth();
-  const { isFavorite, toggleFavorite } = useFavorites();
+  const { isFavorite, addFavorite, removeFavoriteByOutletId } = useFavorites();
+  const { addSearchHistory } = useHistory();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -53,6 +56,7 @@ export default function HomeScreen() {
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [notificationPopupVisible, setNotificationPopupVisible] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchNearest = useCallback(
     async (query: string, lat?: number, lng?: number, filterState?: FilterState) => {
@@ -63,16 +67,61 @@ export default function HomeScreen() {
           outletType: filterState?.outletType,
           maxDistanceKm: filterState?.maxDistanceKm ?? 1,
         };
-        const list = await api.searchNearestOutlets(query, lat, lng, opts);
+        let list: Outlet[];
+        if (token && lat != null && lng != null) {
+          list = await getNearestOutlets(token, {
+            latitude: lat,
+            longitude: lng,
+            itemName: query.trim() || null,
+            distanceKm: opts.maxDistanceKm,
+            categoryId: opts.category ?? null,
+            outletType: opts.outletType ?? null,
+          });
+        } else {
+          list = await api.searchNearestOutlets(query, lat, lng, opts);
+        }
         setOutlets(list);
+        if (query.trim() && token && lat != null && lng != null) {
+          addSearchHistory(query.trim(), list, {
+            latitude: lat,
+            longitude: lng,
+            distanceKm: opts.maxDistanceKm,
+            categoryId: opts.category ?? null,
+            outletType: opts.outletType ?? null,
+          });
+        }
       } catch (e) {
         setOutlets([]);
       } finally {
         setLoading(false);
       }
     },
-    []
+    [token, addSearchHistory]
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      let lat = location?.lat;
+      let lng = location?.lng;
+      if (lat == null || lng == null) {
+        try {
+          const { status } = await Location.requestForegroundPermissionsAsync();
+          if (status === 'granted') {
+            const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+            lat = pos.coords.latitude;
+            lng = pos.coords.longitude;
+            setLocation({ lat, lng });
+          }
+        } catch {
+          setLocationError('Location unavailable');
+        }
+      }
+      await fetchNearest(searchQuery.trim(), lat, lng, filters);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [location, searchQuery, filters, fetchNearest]);
 
   const loadUnreadNotificationCount = useCallback(async () => {
     const userId = user?.userId != null ? String(user.userId) : null;
@@ -104,8 +153,7 @@ export default function HomeScreen() {
           const findItCats = await getFindItCategories({ token, name: '', categoryType: '', status: '' });
           if (mounted) setCategories(findItCats.slice(0, 10).map((c) => c.categoryName));
         } else {
-          const mockCats = await api.getCategories();
-          if (mounted) setCategories(mockCats);
+          if (mounted) setCategories([]);
         }
       } catch {
         if (mounted) setCategories([]);
@@ -293,7 +341,7 @@ export default function HomeScreen() {
         />
       </View>
 
-      {/* Map: ~40% height, user location + 5 nearest outlets, blue markers */}
+      {/* Map: ~40% height, user location + nearest outlets (red markers with name callout) */}
       <View style={[styles.mapContainer, { height: mapHeight }]}>
         {loading && outlets.length === 0 ? (
           <View style={styles.mapPlaceholder}>
@@ -304,7 +352,6 @@ export default function HomeScreen() {
             outlets={outlets}
             initialRegion={initialRegion}
             style={StyleSheet.absoluteFill}
-            pinColor={Theme.primary}
           />
         )}
       </View>
@@ -326,12 +373,24 @@ export default function HomeScreen() {
         <FlatList
           data={outlets}
           keyExtractor={(o) => o.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, outlets.length === 0 && styles.listContentEmpty]}
+          ListEmptyComponent={
+            !loading ? (
+              <View style={styles.emptyOutlets}>
+                <ThemedText style={styles.emptyOutletsText}>No outlets found.</ThemedText>
+                <ThemedText style={styles.emptyOutletsHint}>Try a search or adjust filters.</ThemedText>
+              </View>
+            ) : null
+          }
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Theme.primary} />
+          }
           renderItem={({ item }) => (
             <HomeOutletCard
               outlet={item}
               isFavorite={isFavorite(item.id)}
-              onToggleFavorite={() => toggleFavorite(item)}
+              onAddFavorite={addFavorite}
+              onRemoveFavorite={removeFavoriteByOutletId}
             />
           )}
         />
@@ -444,4 +503,12 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 24,
   },
+  listContentEmpty: { flexGrow: 1 },
+  emptyOutlets: {
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyOutletsText: { fontSize: 16, opacity: 0.9 },
+  emptyOutletsHint: { marginTop: 8, fontSize: 14, opacity: 0.7 },
 });

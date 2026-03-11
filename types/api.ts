@@ -26,12 +26,19 @@ export interface User {
   customerStatus?: string;
 }
 
-/** Item from search (category, availability) */
+/** Item from search or outlet items (nearest API) */
 export interface Item {
   id: string;
   name: string;
   category: ItemCategory;
   availability: 'Yes' | 'No';
+  itemName?: string;
+  categoryName?: string;
+  itemImage?: string;
+  offerPrice?: number;
+  price?: number;
+  discountAvailable?: boolean;
+  itemDescription?: string;
 }
 
 /** Outlet with location, rating, and distance for list/map */
@@ -46,6 +53,8 @@ export interface Outlet {
   distanceKm?: number;
   /** 1-5 for list display */
   rating?: number;
+  /** Items from /customer-app/outlets/nearest (for outlet page) */
+  items?: Item[];
 }
 
 export interface SearchFilters {
@@ -77,6 +86,18 @@ export interface RouteInfo {
   durationMinutes: number;
 }
 
+/** Discount from GET /outlets/:outletId/discounts – current available discounts for an outlet */
+export interface OutletDiscount {
+  id: string;
+  title: string;
+  description?: string;
+  /** Image path/fileName for images/show API (e.g. discount/xxx.jpg or xxx.jpg) */
+  image?: string;
+  discountPercentage?: number;
+  validFrom?: string;
+  validTo?: string;
+}
+
 /** Notification for customer (list + mark as read) */
 export interface Notification {
   id: string;
@@ -84,6 +105,13 @@ export interface Notification {
   body: string;
   read: boolean;
   createdAt: string; // ISO date
+}
+
+/** One favorite entry from GET /customer-app/favorites (nested outlet + id for DELETE) */
+export interface FavoriteEntry {
+  customer_favorite_id: number;
+  outlet: Outlet;
+  nickname?: string;
 }
 
 /** Customer onboarding (registration) request – POST /customers/onboarding */

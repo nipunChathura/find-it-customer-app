@@ -148,6 +148,10 @@ export default function ProfileScreen() {
 
   const closePasswordModal = useCallback(() => {
     setPasswordModalVisible(false);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordError(null);
   }, []);
 
   const handleChangePassword = useCallback(async () => {
@@ -430,55 +434,65 @@ export default function ProfileScreen() {
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.modalKeyboard}
           >
-            <Pressable style={[styles.modalContent, styles.passwordModalContent, { backgroundColor: Theme.background }]} onPress={(e) => e.stopPropagation()}>
+            <Pressable style={[styles.passwordModalSheet, { backgroundColor: Theme.background, borderColor: cardBorder }]} onPress={(e) => e.stopPropagation()}>
               <View style={[styles.modalHandle, { backgroundColor: cardBorder }]} />
-              <ThemedText type="subtitle" style={styles.modalTitle}>Change password</ThemedText>
-              <ThemedTextInput
-                label="Current password"
-                placeholder="Enter current password"
-                value={currentPassword}
-                onChangeText={(t) => { setCurrentPassword(t); setPasswordError(null); }}
-                secureTextEntry
-                containerStyle={styles.modalSearch}
-              />
-              <ThemedTextInput
-                label="New password"
-                placeholder="At least 6 characters"
-                value={newPassword}
-                onChangeText={(t) => { setNewPassword(t); setPasswordError(null); }}
-                secureTextEntry
-                containerStyle={styles.modalSearch}
-              />
-              <ThemedTextInput
-                label="Confirm new password"
-                placeholder="Re-enter new password"
-                value={confirmPassword}
-                onChangeText={(t) => { setConfirmPassword(t); setPasswordError(null); }}
-                secureTextEntry
-                containerStyle={styles.modalSearch}
-              />
-              {passwordError ? (
-                <ThemedText style={styles.countryError}>{passwordError}</ThemedText>
-              ) : null}
-              <View style={styles.passwordModalActions}>
-                <Pressable
-                  style={({ pressed }) => [styles.cancelBtn, { borderColor: cardBorder }, pressed && styles.editBtnPressed]}
-                  onPress={closePasswordModal}
-                  disabled={passwordChanging}
-                >
-                  <ThemedText style={[styles.cancelBtnText, { color: iconColor }]}>Cancel</ThemedText>
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [styles.updateBtn, pressed && styles.editBtnPressed]}
-                  onPress={handleChangePassword}
-                  disabled={passwordChanging}
-                >
-                  {passwordChanging ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <ThemedText style={styles.updateBtnText}>Change password</ThemedText>
-                  )}
-                </Pressable>
+              <View style={[styles.passwordModalHeader, { backgroundColor: Theme.primary + '12' }]}>
+                <View style={[styles.passwordModalIconWrap, { backgroundColor: Theme.primary }]}>
+                  <IconSymbol name="lock.fill" size={24} color="#fff" />
+                </View>
+                <ThemedText type="subtitle" style={[styles.passwordModalTitle, { color: Theme.primary }]}>Change password</ThemedText>
+                <ThemedText style={styles.passwordModalSubtitle}>Enter your current password and choose a new one.</ThemedText>
+              </View>
+              <View style={styles.passwordModalForm}>
+                <ThemedTextInput
+                  label="Current password"
+                  placeholder="Enter current password"
+                  value={currentPassword}
+                  onChangeText={(t) => { setCurrentPassword(t); setPasswordError(null); }}
+                  secureTextEntry
+                  containerStyle={styles.passwordModalInput}
+                />
+                <ThemedTextInput
+                  label="New password"
+                  placeholder="At least 6 characters"
+                  value={newPassword}
+                  onChangeText={(t) => { setNewPassword(t); setPasswordError(null); }}
+                  secureTextEntry
+                  containerStyle={styles.passwordModalInput}
+                />
+                <ThemedTextInput
+                  label="Confirm new password"
+                  placeholder="Re-enter new password"
+                  value={confirmPassword}
+                  onChangeText={(t) => { setConfirmPassword(t); setPasswordError(null); }}
+                  secureTextEntry
+                  containerStyle={styles.passwordModalInput}
+                />
+                {passwordError ? (
+                  <View style={[styles.passwordErrorWrap, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}>
+                    <ThemedText style={styles.passwordErrorText}>{passwordError}</ThemedText>
+                  </View>
+                ) : null}
+                <View style={styles.passwordModalActions}>
+                  <Pressable
+                    style={({ pressed }) => [styles.passwordCancelBtn, { borderColor: cardBorder }, pressed && styles.editBtnPressed]}
+                    onPress={closePasswordModal}
+                    disabled={passwordChanging}
+                  >
+                    <ThemedText style={[styles.passwordCancelBtnText, { color: iconColor }]}>Cancel</ThemedText>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [styles.passwordSubmitBtn, pressed && styles.editBtnPressed]}
+                    onPress={handleChangePassword}
+                    disabled={passwordChanging}
+                  >
+                    {passwordChanging ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <ThemedText style={styles.passwordSubmitBtnText}>Submit</ThemedText>
+                    )}
+                  </Pressable>
+                </View>
               </View>
             </Pressable>
           </KeyboardAvoidingView>
@@ -708,14 +722,67 @@ const styles = StyleSheet.create({
   modalKeyboard: {
     justifyContent: 'flex-end',
   },
-  passwordModalContent: {
+  passwordModalSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 12,
     paddingBottom: 32,
+    paddingHorizontal: 24,
+    maxHeight: '85%',
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
   },
+  passwordModalHeader: {
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    borderRadius: Layout.radius.lg,
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+  passwordModalIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  passwordModalTitle: { fontSize: 20, fontWeight: '700', marginBottom: 4 },
+  passwordModalSubtitle: { fontSize: 14, opacity: 0.85, textAlign: 'center' },
+  passwordModalForm: { paddingHorizontal: 4 },
+  passwordModalInput: { marginBottom: 16 },
+  passwordErrorWrap: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: Layout.radius.md,
+    borderWidth: 1,
+    marginBottom: 20,
+  },
+  passwordErrorText: { color: '#dc2626', fontSize: 14 },
   passwordModalActions: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 14,
     marginTop: 24,
   },
+  passwordCancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: Layout.radius.lg,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  passwordCancelBtnText: { fontSize: 16, fontWeight: '600' },
+  passwordSubmitBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: Layout.radius.lg,
+    backgroundColor: Theme.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  passwordSubmitBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
