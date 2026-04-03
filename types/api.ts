@@ -1,15 +1,15 @@
 export type ItemCategory = string;
 export type OutletType = string;
 
-/** Logged-in customer (from JWT / API – login response is flat) */
+
 export interface User {
   id: string;
   email: string;
   name: string;
   mobile: string;
-  /** Profile image URL (fileName from backend, e.g. profile/abc.jpg) */
+  
   profileImageUrl?: string;
-  /** From login response */
+  
   userId?: number;
   username?: string;
   userStatus?: string;
@@ -26,7 +26,7 @@ export interface User {
   customerStatus?: string;
 }
 
-/** Item from search or outlet items (nearest API) */
+
 export interface Item {
   id: string;
   name: string;
@@ -41,7 +41,7 @@ export interface Item {
   itemDescription?: string;
 }
 
-/** Outlet with location, rating, and distance for list/map */
+
 export interface Outlet {
   id: string;
   name: string;
@@ -51,9 +51,9 @@ export interface Outlet {
   longitude: number;
   isOpen: boolean;
   distanceKm?: number;
-  /** 1-5 for list display */
+  
   rating?: number;
-  /** Items from /customer-app/outlets/nearest (for outlet page) */
+  
   items?: Item[];
 }
 
@@ -66,7 +66,7 @@ export interface SearchParams extends SearchFilters {
   query?: string;
 }
 
-/** One entry in search history (query + results at time of search) */
+
 export interface SearchHistoryEntry {
   id: string;
   query: string;
@@ -74,47 +74,47 @@ export interface SearchHistoryEntry {
   timestamp: number;
 }
 
-/** Outlet the user has visited (for route history) */
+
 export interface VisitedOutletEntry {
   outlet: Outlet;
   visitedAt: number;
 }
 
-/** Route summary for navigation (distance + ETA) */
+
 export interface RouteInfo {
   distanceKm: number;
   durationMinutes: number;
 }
 
-/** Discount from GET /outlets/:outletId/discounts – current available discounts for an outlet */
+
 export interface OutletDiscount {
   id: string;
   title: string;
   description?: string;
-  /** Image path/fileName for images/show API (e.g. discount/xxx.jpg or xxx.jpg) */
+  
   image?: string;
   discountPercentage?: number;
   validFrom?: string;
   validTo?: string;
 }
 
-/** Notification for customer (list + mark as read) */
+
 export interface Notification {
   id: string;
   title: string;
   body: string;
   read: boolean;
-  createdAt: string; // ISO date
+  createdAt: string;
 }
 
-/** One favorite entry from GET /customer-app/favorites (nested outlet + id for DELETE) */
+
 export interface FavoriteEntry {
   customer_favorite_id: number;
   outlet: Outlet;
   nickname?: string;
 }
 
-/** Customer onboarding (registration) request – POST /customers/onboarding */
+
 export interface CustomerOnboardingRequest {
   firstName: string;
   lastName: string;

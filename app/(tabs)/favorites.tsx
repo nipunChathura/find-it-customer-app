@@ -1,6 +1,4 @@
-/**
- * Favorites screen: list of saved outlets. Tap to open outlet detail or remove from favorites.
- */
+
 
 import { useFavorites } from '@/contexts/favorites-context';
 import { useThemeColor } from '@/hooks/use-theme-color';

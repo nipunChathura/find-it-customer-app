@@ -1,7 +1,4 @@
-/**
- * Outlet detail: outlet details, route (distance, ETA, Show route), items list + search.
- * Then "I've arrived" and feedback.
- */
+
 
 import { Layout, Theme } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
@@ -9,6 +6,7 @@ import { useFavorites } from '@/contexts/favorites-context';
 import { useHistory } from '@/contexts/history-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { api } from '@/services/api';
+import { fetchRoute as fetchOsrmRoute } from '@/services/route-directions';
 import { getOutletDiscounts, searchItems as searchItemsApi, submitFeedback } from '@/services/customer-api';
 import { getOutletFromCache } from '@/services/outlet-cache';
 import type { Item, Outlet, OutletDiscount, RouteInfo } from '@/types/api';
@@ -61,14 +59,14 @@ function formatDistance(km: number): string {
   return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
 }
 
-/** Haversine distance in km (client-side fallback when route API is unavailable) */
+
 function haversineKm(
   lat1: number,
   lng1: number,
   lat2: number,
   lng2: number
 ): number {
-  const R = 6371; // Earth radius km
+  const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
   const a =
@@ -120,6 +118,8 @@ export default function OutletDetailScreen() {
   const tint = useThemeColor({}, 'tint');
   const cardBg = useThemeColor({}, 'card');
   const borderColor = useThemeColor({}, 'cardBorder');
+  const availableColor = useThemeColor({}, 'available');
+  const iconMuted = useThemeColor({}, 'icon');
 
   useEffect(() => {
     const cached = params.id ? getOutletFromCache(params.id) : undefined;
@@ -173,13 +173,24 @@ export default function OutletDetailScreen() {
       const toLat = outlet.latitude;
       const toLng = outlet.longitude;
       try {
-        const info = await api.getRoute(fromLat, fromLng, toLat, toLng);
-        setRouteInfo(info);
+        const osrm = await fetchOsrmRoute(fromLat, fromLng, toLat, toLng, 'car');
+        if (osrm && osrm.distanceMeters > 0) {
+          setRouteInfo({
+            distanceKm: osrm.distanceMeters / 1000,
+            durationMinutes: Math.max(1, Math.round(osrm.durationSeconds / 60)),
+          });
+        } else {
+          throw new Error('No OSRM route');
+        }
       } catch {
-        // Fallback: compute distance client-side when route API is unavailable
-        const distanceKm = haversineKm(fromLat, fromLng, toLat, toLng);
-        const durationMinutes = Math.max(1, Math.round(distanceKm * 2)); // ~2 min per km rough estimate
-        setRouteInfo({ distanceKm, durationMinutes });
+        try {
+          const info = await api.getRoute(fromLat, fromLng, toLat, toLng);
+          setRouteInfo(info);
+        } catch {
+          const distanceKm = haversineKm(fromLat, fromLng, toLat, toLng);
+          const durationMinutes = Math.max(1, Math.round(distanceKm * 2));
+          setRouteInfo({ distanceKm, durationMinutes });
+        }
       }
     } catch {
       setRouteInfo(null);
@@ -319,7 +330,6 @@ export default function OutletDetailScreen() {
   return (
     <ThemedView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* ——— Outlet details ——— */}
         <View style={[styles.section, styles.card, { backgroundColor: cardBg, borderColor }]}>
           <View style={[styles.sectionTitleRow, { backgroundColor: Theme.secondary + '12' }]}>
             <IconSymbol name="map.fill" size={20} color={Theme.secondary} />
@@ -344,13 +354,14 @@ export default function OutletDetailScreen() {
             {outlet.rating != null && (
               <ThemedText style={styles.rating}>★ {outlet.rating.toFixed(1)}</ThemedText>
             )}
-            <ThemedText style={[styles.openStatus, outlet.isOpen && styles.openStatusGreen]}>
-              {outlet.isOpen ? 'Open' : 'Closed'}
-            </ThemedText>
+            <View style={[styles.openStatusBadge, outlet.isOpen ? styles.openStatusBadgeOpen : styles.openStatusBadgeClosed]}>
+              <ThemedText style={[styles.openStatus, outlet.isOpen ? styles.openStatusGreen : styles.openStatusClosed]}>
+                {outlet.isOpen ? 'Open' : 'Closed'}
+              </ThemedText>
+            </View>
           </View>
         </View>
 
-        {/* ——— Route details ——— */}
         <View style={[styles.section, styles.card, { backgroundColor: cardBg, borderColor }]}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>
             Route details
@@ -374,22 +385,22 @@ export default function OutletDetailScreen() {
           <Pressable
             style={({ pressed }) => [styles.showRouteBtn, pressed && styles.pressed]}
             onPress={() => {
-              if (!routeInfo && !routeLoading) loadRoute();
-              else if (routeInfo) {
-                router.push({
-                  pathname: '/route',
-                  params: {
-                    destLat: String(outlet.latitude),
-                    destLng: String(outlet.longitude),
-                    outletName: outlet.name,
-                  },
-                });
+              if (!routeInfo && !routeLoading) {
+                loadRoute();
               }
+              router.push({
+                pathname: '/route',
+                params: {
+                  destLat: String(outlet.latitude),
+                  destLng: String(outlet.longitude),
+                  outletName: outlet.name,
+                },
+              });
             }}
           >
             <IconSymbol name="map.fill" size={18} color="#fff" />
             <ThemedText style={styles.showRouteText}>
-              {routeInfo ? 'Show route' : routeLoading ? 'Loading…' : 'Get distance & Show route'}
+              {routeLoading ? 'Opening map…' : 'Show route'}
             </ThemedText>
           </Pressable>
           {routeInfo && (
@@ -399,7 +410,6 @@ export default function OutletDetailScreen() {
           )}
         </View>
 
-        {/* ——— Available discount now ——— */}
         <View style={[styles.section, styles.discountSectionCard, { backgroundColor: cardBg, borderColor }]}>
           <View style={[styles.discountSectionHeader, { backgroundColor: Theme.primary + '12' }]}>
             <View style={[styles.discountSectionIconWrap, { backgroundColor: Theme.primary }]}>
@@ -457,12 +467,11 @@ export default function OutletDetailScreen() {
           )}
         </View>
 
-        {/* ——— Items ——— */}
         <View style={[styles.section, styles.card, { backgroundColor: cardBg, borderColor }]}>
           <View style={[styles.sectionTitleRow, { backgroundColor: Theme.accent + '18' }]}>
             <IconSymbol name="list.bullet" size={20} color={Theme.accent} />
             <ThemedText type="subtitle" style={[styles.sectionTitle, styles.sectionTitleColored, { color: Theme.accent }]}>
-              Items
+              Items/Services
             </ThemedText>
           </View>
           <View style={[styles.searchWrap, { borderColor }]}>
@@ -485,7 +494,7 @@ export default function OutletDetailScreen() {
                 <>
                   {visibleItems.map((item) => {
                   const displayName = item.itemName ?? item.name;
-                  const displayCategory = item.categoryName ?? item.category;
+                  const displayCategory = (item.categoryName ?? item.category)?.trim() ?? '';
                   const itemFileName = item.itemImage?.includes('/')
                     ? item.itemImage.split('/').pop()
                     : item.itemImage;
@@ -511,7 +520,32 @@ export default function OutletDetailScreen() {
                         )}
                         <View style={styles.itemDetails}>
                           <ThemedText type="defaultSemiBold" style={styles.itemName}>{displayName}</ThemedText>
-                          <ThemedText style={styles.itemMeta}>{displayCategory} · {item.availability}</ThemedText>
+                          <View style={styles.itemMetaBlock}>
+                            {displayCategory !== '' ? (
+                              <ThemedText style={styles.itemMeta}>{displayCategory}</ThemedText>
+                            ) : null}
+                            <View
+                              style={[
+                                styles.itemAvailabilityBadge,
+                                item.availability === 'Yes'
+                                  ? {
+                                      backgroundColor: availableColor + '22',
+                                      borderColor: availableColor + '55',
+                                    }
+                                  : { backgroundColor: cardBg, borderColor },
+                              ]}
+                            >
+                              <ThemedText
+                                type="defaultSemiBold"
+                                style={[
+                                  styles.itemAvailabilityBadgeText,
+                                  item.availability === 'Yes' ? { color: availableColor } : { color: iconMuted },
+                                ]}
+                              >
+                                {item.availability === 'Yes' ? 'Available' : 'Unavailable'}
+                              </ThemedText>
+                            </View>
+                          </View>
                           {item.itemDescription ? (
                             <ThemedText style={styles.itemDesc} numberOfLines={2}>{item.itemDescription}</ThemedText>
                           ) : null}
@@ -553,7 +587,6 @@ export default function OutletDetailScreen() {
           )}
         </View>
 
-        {/* ——— Actions ——— */}
         <Pressable
           style={({ pressed }) => [styles.button, pressed && styles.pressed]}
           onPress={openArrivedModal}
@@ -562,7 +595,6 @@ export default function OutletDetailScreen() {
         </Pressable>
       </ScrollView>
 
-      {/* I've arrived popup: add to favorites + feedback + rating */}
       <Modal
         visible={arrivedModalVisible}
         transparent
@@ -649,7 +681,6 @@ export default function OutletDetailScreen() {
         </Pressable>
       </Modal>
 
-      {/* Discount detail popup */}
       <Modal visible={selectedDiscount != null} transparent animationType="fade">
         <Pressable style={styles.discountModalOverlay} onPress={() => setSelectedDiscount(null)}>
           <Pressable style={[styles.discountModalContent, { backgroundColor: cardBg }]} onPress={(e) => e.stopPropagation()}>
@@ -789,8 +820,23 @@ const styles = StyleSheet.create({
   address: { marginBottom: 8, opacity: 0.9, fontSize: 14 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
   rating: { fontSize: 14 },
-  openStatus: { fontSize: 14, opacity: 0.8 },
-  openStatusGreen: { color: '#16a34a', fontWeight: '600' },
+  openStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Layout.radius.sm,
+    borderWidth: 1,
+  },
+  openStatusBadgeOpen: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#86efac',
+  },
+  openStatusBadgeClosed: {
+    backgroundColor: '#f1f5f9',
+    borderColor: '#cbd5e1',
+  },
+  openStatus: { fontSize: 13 },
+  openStatusGreen: { color: '#16a34a', fontWeight: '700' },
+  openStatusClosed: { color: '#64748b', fontWeight: '600' },
   routeRow: { marginTop: 6, fontSize: 14 },
   routeLoaderWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
   hint: { fontSize: 14, opacity: 0.7, marginTop: 8 },
@@ -907,7 +953,16 @@ const styles = StyleSheet.create({
   itemImagePlaceholder: { width: 72, height: 72, borderRadius: 8 },
   itemDetails: { flex: 1 },
   itemName: { fontSize: 15 },
-  itemMeta: { fontSize: 13, opacity: 0.8, marginTop: 2 },
+  itemMetaBlock: { marginTop: 6, gap: 6 },
+  itemMeta: { fontSize: 13, opacity: 0.8 },
+  itemAvailabilityBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: Layout.radius.sm,
+    borderWidth: 1,
+  },
+  itemAvailabilityBadgeText: { fontSize: 13 },
   itemDesc: { fontSize: 12, opacity: 0.85, marginTop: 4 },
   itemPriceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' },
   offerPrice: { fontSize: 15, color: Theme.primary },

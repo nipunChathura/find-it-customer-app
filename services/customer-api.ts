@@ -1,13 +1,11 @@
-/**
- * Find It Customer API – login, onboarding, countries.
- */
+
 
 import { FIND_IT_API_BASE } from '@/constants/api';
 import type { CustomerOnboardingRequest, FavoriteEntry, Item, Notification, Outlet, OutletDiscount, SearchHistoryEntry } from '@/types/api';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
-/** fetch with 30s timeout; aborts request on timeout */
+
 async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -23,7 +21,7 @@ if (__DEV__) {
   console.log('[API] Backend base URL:', FIND_IT_API_BASE);
 }
 
-/** POST /images/upload – multipart form: file, type="profile". Returns { fileName } or similar. Optional Bearer token. */
+
 export async function uploadProfileImage(
   imageUri: string,
   options?: { token?: string | null }
@@ -79,7 +77,7 @@ export async function uploadProfileImage(
   return String(fileName);
 }
 
-/** Profile update payload – fields that can be updated */
+
 export interface UpdateProfileRequest {
   firstName?: string;
   lastName?: string;
@@ -90,7 +88,7 @@ export interface UpdateProfileRequest {
   countryName?: string;
 }
 
-/** PUT /customer-app/profile – update customer profile. Requires Bearer token. */
+
 export async function updateCustomerProfile(
   data: UpdateProfileRequest,
   token: string
@@ -125,7 +123,7 @@ export async function updateCustomerProfile(
   }
 }
 
-/** PUT /customer-app/profile/image – set profile image to uploaded fileName. Body: { fileName }. Requires Bearer token. */
+
 export async function updateProfileImageOnServer(
   fileName: string,
   token: string
@@ -158,7 +156,7 @@ export async function updateProfileImageOnServer(
   }
 }
 
-/** GET /categories – returns list of categories for filter. Query: name, categoryType, status. Requires Bearer token. */
+
 export interface FindItCategory {
   categoryId: number;
   categoryName: string;
@@ -207,7 +205,7 @@ export async function getFindItCategories(
   return [];
 }
 
-/** Login API response – flat structure (no nested user) */
+
 export interface LoginResponse {
   status?: string;
   responseCode?: string;
@@ -231,7 +229,41 @@ export interface LoginResponse {
   customerStatus?: string;
 }
 
-/** POST /customer-app/login – email + password, returns flat response */
+function normalizeLoginResponse(json: unknown): LoginResponse {
+  if (!json || typeof json !== 'object') return {};
+  const root = json as Record<string, unknown>;
+  const inner =
+    root.data && typeof root.data === 'object' && !Array.isArray(root.data)
+      ? (root.data as Record<string, unknown>)
+      : null;
+  const pick = (key: string): unknown => root[key] ?? inner?.[key];
+  const profileImageUrl =
+    (pick('profileImageUrl') as string | undefined) ??
+    (pick('profile_image_url') as string | undefined);
+  return {
+    status: pick('status') as string | undefined,
+    responseCode: pick('responseCode') as string | undefined,
+    responseMessage: pick('responseMessage') as string | undefined,
+    token: pick('token') as string | undefined,
+    userId: pick('userId') as number | undefined,
+    email: pick('email') as string | undefined,
+    username: pick('username') as string | undefined,
+    userStatus: pick('userStatus') as string | undefined,
+    role: pick('role') as string | undefined,
+    customerId: pick('customerId') as number | undefined,
+    profileImageUrl,
+    firstName: pick('firstName') as string | undefined,
+    lastName: pick('lastName') as string | undefined,
+    phoneNumber: pick('phoneNumber') as string | undefined,
+    nic: pick('nic') as string | undefined,
+    dob: pick('dob') as string | undefined,
+    gender: pick('gender') as string | undefined,
+    countryName: pick('countryName') as string | undefined,
+    membershipType: pick('membershipType') as string | undefined,
+    customerStatus: pick('customerStatus') as string | undefined,
+  };
+}
+
 export async function customerLogin(
   email: string,
   password: string
@@ -260,16 +292,16 @@ export async function customerLogin(
     else if (text) message = text.slice(0, 200);
     throw new Error(message);
   }
-  return (typeof json === 'object' && json !== null ? json : {}) as LoginResponse;
+  return normalizeLoginResponse(json);
 }
 
-/** Request body for change password */
+
 export interface ChangePasswordRequest {
   currentPassword: string;
   newPassword: string;
 }
 
-/** PUT or POST /customer-app/password – change password. Requires Bearer token. */
+
 export async function changePassword(
   data: ChangePasswordRequest,
   token: string
@@ -306,7 +338,7 @@ export async function changePassword(
   }
 }
 
-/** API country item: { code, countryId, name, responseCode?, status? } */
+
 interface CountryItem {
   code?: string;
   countryId?: number;
@@ -326,7 +358,7 @@ function toCountryList(data: unknown): CountryItem[] {
   return [];
 }
 
-/** GET /countries?name= – returns array of { code, countryId, name, ... }; we return list of names for search/select */
+
 export async function getCountries(searchName: string = ''): Promise<string[]> {
   const nameParam = typeof searchName === 'string' ? searchName.trim() : '';
   const url = `${FIND_IT_API_BASE}/countries?name=${encodeURIComponent(nameParam)}`;
@@ -376,7 +408,7 @@ export async function customerOnboarding(
   return typeof json === 'object' && json !== null ? json : {};
 }
 
-/** GET /notifications/unread/{userId} – list unread notifications for logged-in user. Requires Bearer token. Pass userId from login response (e.g. 12). */
+
 function toNotificationList(data: unknown): Notification[] {
   if (Array.isArray(data)) return data as Notification[];
   if (data && typeof data === 'object') {
@@ -409,7 +441,7 @@ export async function getNotifications(token: string | null, userId: string | nu
   }
 }
 
-/** POST /notifications/read/{id} – mark notification as read. Requires Bearer token. */
+
 export async function markNotificationRead(
   notificationId: string,
   token: string | null
@@ -427,7 +459,7 @@ export async function markNotificationRead(
   }
 }
 
-/** Map raw API favorite item to FavoriteEntry (outlet may be nested) */
+
 function toFavoriteEntry(raw: Record<string, unknown>): FavoriteEntry {
   const customer_favorite_id = Number(raw.customer_favorite_id ?? raw.id ?? 0);
   const outletRaw = raw.outlet ?? raw;
@@ -446,7 +478,7 @@ function toFavoriteList(data: unknown): FavoriteEntry[] {
   return [];
 }
 
-/** GET /customer-app/favorites – list favorites. Requires Bearer token. */
+
 export async function getFavorites(token: string | null): Promise<FavoriteEntry[]> {
   if (!token) return [];
   const url = `${FIND_IT_API_BASE}/customer-app/favorites`;
@@ -469,7 +501,7 @@ export async function getFavorites(token: string | null): Promise<FavoriteEntry[
   }
 }
 
-/** POST /customer-app/favorites – add outlet to favorites. Body: { outletId, nickname }. Requires Bearer token. */
+
 export async function addFavoriteOutlet(
   token: string | null,
   outletId: string,
@@ -500,7 +532,7 @@ export async function addFavoriteOutlet(
   }
 }
 
-/** DELETE /customer-app/favorites/{customer_favorite_id} – remove from favorites. Requires Bearer token. */
+
 export async function removeFavoriteOutlet(
   token: string | null,
   customer_favorite_id: number
@@ -514,7 +546,7 @@ export async function removeFavoriteOutlet(
   if (!res.ok) throw new Error(`Remove favorite failed (${res.status})`);
 }
 
-/** Request body for POST /customer-app/search-history */
+
 export interface SaveSearchHistoryRequest {
   searchText: string;
   latitude: number;
@@ -524,7 +556,7 @@ export interface SaveSearchHistoryRequest {
   outletType?: string | null;
 }
 
-/** POST /customer-app/search-history – save a search (text + location + filters). Requires Bearer token. */
+
 export async function saveSearchHistory(
   token: string | null,
   body: SaveSearchHistoryRequest
@@ -575,7 +607,7 @@ function toSearchHistoryList(data: unknown): SearchHistoryEntry[] {
   });
 }
 
-/** GET /customer-app/search-history – list search history. Requires Bearer token. */
+
 export async function getSearchHistory(token: string | null): Promise<SearchHistoryEntry[]> {
   if (!token) return [];
   const url = `${FIND_IT_API_BASE}/customer-app/search-history`;
@@ -598,7 +630,7 @@ export async function getSearchHistory(token: string | null): Promise<SearchHist
   }
 }
 
-/** DELETE /customer-app/search-history/{id} – remove one entry. Requires Bearer token. */
+
 export async function deleteSearchHistoryEntry(token: string | null, id: string): Promise<void> {
   if (!token) return;
   const url = `${FIND_IT_API_BASE}/customer-app/search-history/${encodeURIComponent(id)}`;
@@ -609,14 +641,14 @@ export async function deleteSearchHistoryEntry(token: string | null, id: string)
   if (!res.ok) throw new Error(`Delete search history failed (${res.status})`);
 }
 
-/** Request body for POST /customer-app/feedback */
+
 export interface SubmitFeedbackRequest {
   outletId: number;
   feedbackText: string;
   rating: number;
 }
 
-/** POST /customer-app/feedback – submit outlet feedback (rating + text). Requires Bearer token. */
+
 export async function submitFeedback(
   token: string | null,
   body: SubmitFeedbackRequest
@@ -685,7 +717,7 @@ function normalizeOutletDiscounts(data: unknown): OutletDiscount[] {
   });
 }
 
-/** GET /outlets/:outletId/discounts – current available discounts for an outlet. Requires Bearer token. */
+
 export async function getOutletDiscounts(
   token: string | null,
   outletId: string
@@ -713,7 +745,7 @@ export async function getOutletDiscounts(
   }
 }
 
-/** Request body for POST /customer-app/outlets/nearest */
+
 export interface NearestOutletsRequest {
   latitude: number;
   longitude: number;
@@ -768,7 +800,7 @@ function toOutletList(data: unknown): Outlet[] {
   return arr.map((x: unknown) => mapOutlet((x as Record<string, unknown>) ?? {}));
 }
 
-/** POST /customer-app/outlets/nearest – search nearest outlets with filters. Requires Bearer token. */
+
 export async function getNearestOutlets(
   token: string | null,
   body: NearestOutletsRequest

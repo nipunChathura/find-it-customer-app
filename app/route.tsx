@@ -1,13 +1,16 @@
-/**
- * Route screen: map with route polyline from current location to outlet.
- * Travel mode: Car, Bike, Walk.
- */
+
 
 import { Theme } from '@/constants/theme';
-import { fetchRoute, type RouteResult, type TravelMode } from '@/services/route-directions';
+import {
+  buildMapPolyline,
+  fetchRoute,
+  getStraightLineFallback,
+  type RouteResult,
+  type TravelMode,
+} from '@/services/route-directions';
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Pressable,
@@ -31,7 +34,7 @@ function formatDistance(m: number): string {
   return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
 }
 
-/** Map style: hide POIs; keep road names and city/locality names visible. */
+
 const MAP_STYLE_ROADS_AND_CITIES = [
   { featureType: 'poi', elementType: 'all', stylers: [{ visibility: 'off' }] },
   { featureType: 'poi.business', elementType: 'all', stylers: [{ visibility: 'off' }] },
@@ -61,16 +64,6 @@ export default function RouteScreen() {
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchRouteForMode = useCallback(
-    async (originLat: number, originLng: number, travelMode: TravelMode) => {
-      setLoading(true);
-      const result = await fetchRoute(originLat, originLng, destLat, destLng, travelMode);
-      setRoute(result);
-      setLoading(false);
-    },
-    [destLat, destLng]
-  );
-
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -87,12 +80,11 @@ export default function RouteScreen() {
         if (cancelled) return;
         const { latitude, longitude } = loc.coords;
         setOrigin({ lat: latitude, lng: longitude });
-        const result = await fetchRoute(latitude, longitude, destLat, destLng, 'car');
-        if (!cancelled) setRoute(result);
       } catch {
-        if (!cancelled) setLocationError('Could not get location');
-      } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLocationError('Could not get location');
+          setLoading(false);
+        }
       }
     })();
     return () => {
@@ -102,22 +94,43 @@ export default function RouteScreen() {
 
   useEffect(() => {
     if (!origin) return;
-    fetchRouteForMode(origin.lat, origin.lng, mode);
-  }, [mode, origin, fetchRouteForMode]);
+    let ignore = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const result = await fetchRoute(origin.lat, origin.lng, destLat, destLng, mode);
+        if (!ignore) {
+          setRoute(
+            result ?? getStraightLineFallback(origin.lat, origin.lng, destLat, destLng, mode)
+          );
+        }
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [origin, destLat, destLng, mode]);
 
-  // Fit map to show full route from current location to destination
-  useEffect(() => {
-    if (!route?.coordinates?.length || !origin) return;
-    const points = [
-      { latitude: origin.lat, longitude: origin.lng },
-      ...route.coordinates,
-      { latitude: destLat, longitude: destLng },
-    ];
-    mapRef.current?.fitToCoordinates(points, {
-      edgePadding: { top: 60, right: 40, bottom: 60, left: 40 },
+  const polylineCoords = useMemo(() => {
+    if (!origin || !route?.coordinates?.length) return [];
+    return buildMapPolyline(origin, route.coordinates, destLat, destLng);
+  }, [origin, route, destLat, destLng]);
+
+  const fitMapToRoute = useCallback(() => {
+    if (polylineCoords.length < 2 || !mapRef.current) return;
+    mapRef.current.fitToCoordinates(polylineCoords, {
+      edgePadding: { top: 60, right: 40, bottom: 100, left: 40 },
       animated: true,
     });
-  }, [route, origin, destLat, destLng]);
+  }, [polylineCoords]);
+
+  useEffect(() => {
+    if (polylineCoords.length < 2) return;
+    const t = setTimeout(fitMapToRoute, 50);
+    return () => clearTimeout(t);
+  }, [polylineCoords, fitMapToRoute]);
 
   const region =
     origin && (destLat !== 0 || destLng !== 0)
@@ -195,6 +208,9 @@ export default function RouteScreen() {
           <ThemedText type="defaultSemiBold" style={styles.stat}>
             {formatDistance(route.distanceMeters)} · {formatDuration(route.durationSeconds)}
             <ThemedText style={styles.statMode}> ({mode === 'car' ? 'Car' : mode === 'bike' ? 'Bike' : 'Walk'})</ThemedText>
+            {route.isApproximate ? (
+              <ThemedText style={styles.statApprox}> · straight-line estimate</ThemedText>
+            ) : null}
           </ThemedText>
         </View>
       ) : null}
@@ -206,7 +222,10 @@ export default function RouteScreen() {
           initialRegion={region}
           showsUserLocation
           showsMyLocationButton
+          showsCompass={false}
+          toolbarEnabled={false}
           customMapStyle={MAP_STYLE_ROADS_AND_CITIES}
+          onMapReady={fitMapToRoute}
         >
           {origin && (
             <Marker
@@ -220,12 +239,9 @@ export default function RouteScreen() {
             title={outletName}
             pinColor="#E53935"
           />
-          {route && origin && route.coordinates.length > 0 && (
+          {polylineCoords.length >= 2 && (
             <Polyline
-              coordinates={[
-                { latitude: origin.lat, longitude: origin.lng },
-                ...route.coordinates,
-              ]}
+              coordinates={polylineCoords}
               strokeColor={Theme.primary}
               strokeWidth={4}
             />
@@ -287,6 +303,7 @@ const styles = StyleSheet.create({
   },
   stat: { fontSize: 14, opacity: 0.9 },
   statMode: { fontWeight: '400', opacity: 0.85 },
+  statApprox: { fontWeight: '400', opacity: 0.7, fontSize: 12 },
   loader: {
     position: 'absolute',
     left: 0,

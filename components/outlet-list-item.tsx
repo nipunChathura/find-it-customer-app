@@ -1,6 +1,4 @@
-/**
- * Outlet list item for search results: name, distance, rating. Tappable to open outlet detail.
- */
+
 
 import { Layout } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';

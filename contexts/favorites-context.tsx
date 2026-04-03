@@ -1,7 +1,4 @@
-/**
- * FavoritesContext – Favorites from API (GET /customer-app/favorites).
- * Each entry has outlet, customer_favorite_id (for DELETE), and optional nickname.
- */
+
 
 import { addFavoriteOutlet, getFavorites, removeFavoriteOutlet } from '@/services/customer-api';
 import type { FavoriteEntry, Outlet } from '@/types/api';

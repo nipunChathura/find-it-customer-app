@@ -1,6 +1,4 @@
-/**
- * HistoryContext – Search history from API (GET /customer-app/search-history), visited outlets in local storage.
- */
+
 
 import {
     deleteSearchHistoryEntry as deleteSearchHistoryEntryApi,
@@ -97,7 +95,7 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
         });
         await refreshSearchHistory();
       } catch {
-        // ignore save failure
+
       }
     },
     [token, refreshSearchHistory]
@@ -123,7 +121,7 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
         try {
           await deleteSearchHistoryEntryApi(token, String(entry.id));
         } catch {
-          // continue with rest
+
         }
       }
       setSearchHistory([]);

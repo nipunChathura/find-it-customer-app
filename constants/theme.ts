@@ -1,7 +1,4 @@
-/**
- * Modern Blue Theme (Safe & Professional)
- * Primary: #2563EB | Secondary: #1E40AF | Background: #F8FAFC | Text: #0F172A | Accent: #38BDF8
- */
+
 
 import { Platform } from 'react-native';
 
@@ -46,7 +43,7 @@ export const Colors = {
   },
 };
 
-/** Explicit theme tokens for consistent UI (no hardcoded hex in screens) */
+
 export const Theme = {
   primary: '#2563EB',
   secondary: '#1E40AF',
@@ -72,7 +69,7 @@ export const Layout = {
   availableAccent: '#0d9488',
 };
 
-/** React Navigation theme (headers, tab bar) – Modern Blue */
+
 export const NavigationTheme = {
   light: {
     primary: '#2563EB',
@@ -94,13 +91,13 @@ export const NavigationTheme = {
 
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
+    
     sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
+    
     serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
+    
     rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
+    
     mono: 'ui-monospace',
   },
   default: {

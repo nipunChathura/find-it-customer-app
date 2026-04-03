@@ -1,6 +1,4 @@
-/**
- * Profile tab – login response data (all fields), profile image, edit & update.
- */
+
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedTextInput } from '@/components/themed-text-input';
@@ -44,11 +42,12 @@ function getInitials(user: User): string {
 }
 
 function getProfileImageUri(profileImageUrl?: string): string | null {
-  if (!profileImageUrl) return null;
-  if (profileImageUrl.startsWith('http') || profileImageUrl.startsWith('file://')) {
-    return profileImageUrl;
+  if (!profileImageUrl?.trim()) return null;
+  const raw = profileImageUrl.trim();
+  if (raw.startsWith('http') || raw.startsWith('file://')) {
+    return raw;
   }
-  return `${FIND_IT_API_BASE}/images/show?type=profile&fileName=${encodeURIComponent(profileImageUrl)}`;
+  return `${FIND_IT_API_BASE}/images/show?type=profile&fileName=${encodeURIComponent(raw)}`;
 }
 
 function FieldRow({ label, value, borderColor }: { label: string; value?: string | null; borderColor?: string }) {
@@ -283,11 +282,13 @@ export default function ProfileScreen() {
               <View style={[styles.avatarRing, { borderColor: Theme.primary }]}>
                 {getProfileImageUri(user.profileImageUrl) ? (
                   <Image
+                    key={user.profileImageUrl ?? 'photo'}
                     source={{
                       uri: getProfileImageUri(user.profileImageUrl)!,
                       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
                     }}
                     style={styles.avatar}
+                    contentFit="cover"
                   />
                 ) : (
                   <View style={styles.avatarPlaceholder}>

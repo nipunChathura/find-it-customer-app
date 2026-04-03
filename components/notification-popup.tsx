@@ -1,6 +1,4 @@
-/**
- * Notification popup – modal that shows notification list (no navigation).
- */
+
 
 import { ThemedText } from '@/components/themed-text';
 import { Layout, Theme } from '@/constants/theme';
@@ -76,7 +74,7 @@ function NotificationItem({
 type NotificationPopupProps = {
   visible: boolean;
   onClose: () => void;
-  /** Called after notifications are updated (e.g. after mark as read) so parent can refresh unread count */
+  
   onNotificationsUpdated?: () => void;
 };
 

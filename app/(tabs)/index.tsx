@@ -1,7 +1,4 @@
-/**
- * Home Screen: header (#2563EB), search bar, map (~40%), scrollable nearest outlet cards.
- * Uses theme constants; notification → Notifications, profile → Profile tab, logout → clear token & login.
- */
+
 
 import { FilterSheet, type FilterState } from '@/components/filter-sheet';
 import { HomeOutletCard } from '@/components/home-outlet-card';
@@ -246,7 +243,6 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* Header: #2563EB, logo left, "Find It" center, white icons right */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <View style={styles.headerLeft}>
           <Image
@@ -286,7 +282,6 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Search bar + search button + clear + filter button */}
       <View style={styles.searchWrap}>
         <View style={styles.searchRow}>
           <View style={[styles.searchBar, Layout.shadow.sm, styles.searchBarFlex, searchQuery.length > 0 && styles.searchBarWithClear]}>
@@ -341,7 +336,6 @@ export default function HomeScreen() {
         />
       </View>
 
-      {/* Map: ~40% height, user location + nearest outlets (red markers with name callout) */}
       <View style={[styles.mapContainer, { height: mapHeight }]}>
         {loading && outlets.length === 0 ? (
           <View style={styles.mapPlaceholder}>
@@ -356,7 +350,6 @@ export default function HomeScreen() {
         )}
       </View>
 
-      {/* Nearest outlet list */}
       <View style={styles.listHeader}>
         <ThemedText type="defaultSemiBold" style={styles.listTitle}>
           Nearest outlets

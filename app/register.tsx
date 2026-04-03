@@ -32,7 +32,7 @@ function isValidPhone(value: string): boolean {
   return digits.length >= 10;
 }
 
-/** NIC: 9 digits + V or 12 digits */
+
 function isValidNic(value: string): boolean {
   const trimmed = value.trim().toUpperCase();
   if (/^\d{9}[VvXx]$/.test(trimmed)) return true;
@@ -40,17 +40,17 @@ function isValidNic(value: string): boolean {
   return false;
 }
 
-/** DOB YYYY-MM-DD */
+
 function isValidDob(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
 }
 
-/** Username: 4-20 alphanumeric (matches backend @Pattern) */
+
 function isValidUsername(value: string): boolean {
   return /^[a-zA-Z0-9]{4,20}$/.test(value.trim());
 }
 
-/** Password: 6-12 chars, at least one letter and one digit, letters/digits only (matches backend @Pattern) */
+
 function isValidPassword(value: string): boolean {
   return /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,12}$/.test(value);
 }
@@ -156,7 +156,7 @@ export default function RegisterScreen() {
     }
   }, []);
 
-  // When modal opens or search changes: load countries (debounced when typing)
+
   useEffect(() => {
     if (!countryModalVisible) return;
     const isInitial = countrySearch === '';

@@ -20,7 +20,7 @@ import { IconSymbol } from './ui/icon-symbol';
 export interface FilterState {
   category?: ItemCategory;
   outletType?: OutletType;
-  /** Max distance in km (default 1) – search within this radius */
+  
   maxDistanceKm: number;
 }
 
@@ -35,7 +35,7 @@ type FilterSheetProps = {
   onApply: (f: FilterState) => void;
   categories: ItemCategory[];
   outletTypes: OutletType[];
-  /** When user searches category by name, call API with this param. Pass name (can be empty for all). */
+  
   onCategoryNameSearch?: (name: string) => void;
   categoriesLoading?: boolean;
 };
@@ -64,7 +64,7 @@ export function FilterSheet({
     maxDistanceKm: filters.maxDistanceKm ?? 1,
   }));
   const [categoryNameSearch, setCategoryNameSearch] = useState('');
-  /** Custom distance input (when value is not in 1,2,5,10 km chips) */
+  
   const [customDistanceStr, setCustomDistanceStr] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

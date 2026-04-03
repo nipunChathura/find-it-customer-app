@@ -1,6 +1,4 @@
-/**
- * Notifications screen – fetch list, each item has a "Mark as read" action button.
- */
+
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -154,7 +152,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Theme.cardBorder,
+    // borderBottomColor: Theme.cardBorder,
   },
   title: { marginBottom: 0 },
   centered: {
@@ -169,10 +167,10 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   card: {
-    backgroundColor: Theme.card,
+    // backgroundColor: Theme.card,
     borderRadius: Layout.radius.lg,
     borderWidth: 1,
-    borderColor: Theme.cardBorder,
+    // borderColor: Theme.cardBorder,
     marginBottom: 12,
     overflow: 'hidden',
   },

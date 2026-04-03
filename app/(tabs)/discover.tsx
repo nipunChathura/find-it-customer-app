@@ -1,7 +1,4 @@
-/**
- * Discover screen: search for an item → show 5 nearest outlets on map + list.
- * Uses user location for distance; saves search to history. List shows name, distance, rating.
- */
+
 
 import { Layout } from '@/constants/theme';
 import { useHistory } from '@/contexts/history-context';
@@ -40,7 +37,7 @@ export default function DiscoverScreen() {
   const tint = useThemeColor({}, 'tint');
   const iconColor = useThemeColor({}, 'icon');
 
-  /** Run search: get user location, fetch 5 nearest outlets, save to history */
+  
   const runSearch = useCallback(async () => {
     const query = searchQuery.trim();
     if (!query) return;

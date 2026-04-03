@@ -1,21 +1,35 @@
 import { Layout } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { Outlet } from '@/types/api';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
+import { IconSymbol } from './ui/icon-symbol';
 import { ThemedText } from './themed-text';
 
 type OutletMarkerCardProps = {
   outlet: Outlet;
+  onClose?: () => void;
 };
 
-export function OutletMarkerCard({ outlet }: OutletMarkerCardProps) {
+export function OutletMarkerCard({ outlet, onClose }: OutletMarkerCardProps) {
   const cardBg = useThemeColor({}, 'card');
   const borderColor = useThemeColor({}, 'cardBorder');
   const availableColor = useThemeColor({}, 'available');
+  const iconMuted = useThemeColor({}, 'icon');
 
   return (
     <View style={[styles.card, { backgroundColor: cardBg, borderColor }, Layout.shadow.lg]}>
+      {onClose != null && (
+        <Pressable
+          onPress={onClose}
+          style={({ pressed }) => [styles.closeBtn, pressed && styles.closeBtnPressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+          hitSlop={12}
+        >
+          <IconSymbol name="xmark.circle.fill" size={26} color={iconMuted} />
+        </Pressable>
+      )}
       <ThemedText type="subtitle" style={styles.name} numberOfLines={1}>
         {outlet.name}
       </ThemedText>
@@ -44,11 +58,23 @@ const styles = StyleSheet.create({
     borderRadius: Layout.radius.lg,
     borderWidth: 1,
     padding: 16,
+    paddingTop: 14,
     marginHorizontal: 16,
     marginBottom: 24,
+    position: 'relative',
+  },
+  closeBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    zIndex: 1,
+  },
+  closeBtnPressed: {
+    opacity: 0.6,
   },
   name: {
     marginBottom: 4,
+    paddingRight: 36,
   },
   type: {
     fontSize: 14,

@@ -1,6 +1,4 @@
-/**
- * History screen: search history from API and visited outlets (route history).
- */
+
 
 import { Layout, Theme } from '@/constants/theme';
 import { useHistory } from '@/contexts/history-context';
@@ -79,7 +77,6 @@ export default function HistoryScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Theme.primary} />
         }
       >
-        {/* Search history */}
         <View style={styles.section}>
           <View style={styles.sectionRow}>
             <ThemedText type="subtitle">Search history</ThemedText>
@@ -182,7 +179,6 @@ export default function HistoryScreen() {
           ) : null}
         </View>
 
-        {/* Visited outlets (route history) */}
         <View style={styles.section}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>Previously visited</ThemedText>
           {visitedOutlets.length === 0 ? (

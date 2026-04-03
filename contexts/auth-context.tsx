@@ -1,7 +1,4 @@
-/**
- * AuthContext – JWT-based authentication for Find It Customer App.
- * Login calls Find It API POST /customer-app/login. Token and user stored in SecureStore.
- */
+
 
 import { customerLogin } from '@/services/customer-api';
 import type { User } from '@/types/api';
@@ -21,7 +18,7 @@ interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string, mobile: string) => Promise<void>;
   logout: () => Promise<void>;
-  /** Update stored user (e.g. after changing profile image). Persists to SecureStore. */
+  
   updateUser: (updates: Partial<User>) => Promise<void>;
 }
 
@@ -34,7 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isLoading: true,
   });
 
-  /** Restore session from secure storage on mount */
+  
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -91,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = useCallback(
     async (email: string, password: string, name: string, mobile: string) => {
-      // TODO: Replace with real API call
+
       const res = await fetch('https://your-api.com/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

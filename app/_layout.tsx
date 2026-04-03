@@ -8,7 +8,7 @@ import { AuthProvider, useAuth } from '@/contexts/auth-context';
 import { FavoritesProvider } from '@/contexts/favorites-context';
 import { HistoryProvider } from '@/contexts/history-context';
 
-/** Modern Blue light theme only (dark theme removed). Includes fonts so native-stack header does not crash. */
+
 const AppNavTheme = {
   ...DefaultTheme,
   dark: false,
@@ -23,7 +23,7 @@ const AppNavTheme = {
   },
 };
 
-/** Stack always rendered so /login can show. Redirect to login only when not logged in and trying to open protected (tabs/outlet/feedback). */
+
 function RootStack() {
   const { user, isLoading } = useAuth();
   const segments = useSegments();

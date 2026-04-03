@@ -16,7 +16,7 @@ import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Layout } from '@/constants/theme';
 
-/** Login screen: email + password, form validation, JWT-based auth via AuthContext */
+
 export default function LoginScreen() {
   const { login } = useAuth();
   const [email, setEmail] = useState('');

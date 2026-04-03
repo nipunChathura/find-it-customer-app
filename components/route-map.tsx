@@ -1,6 +1,4 @@
-/**
- * Small map showing route from user location to outlet (polyline). Used on outlet detail.
- */
+
 
 import { Layout } from '@/constants/theme';
 import type { Outlet } from '@/types/api';
@@ -26,7 +24,7 @@ export function RouteMap({ outlet, style }: RouteMapProps) {
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         if (!cancelled) setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
       } catch {
-        // ignore
+
       }
     })();
     return () => { cancelled = true; };
@@ -58,6 +56,8 @@ export function RouteMap({ outlet, style }: RouteMapProps) {
         mapType="standard"
         showsUserLocation
         showsMyLocationButton
+        showsCompass={false}
+        toolbarEnabled={false}
         showsPointsOfInterest={false}
         showsBuildings={false}
       >

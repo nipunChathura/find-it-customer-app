@@ -1,8 +1,4 @@
-/**
- * Reusable outlet card for Home: name, rating, distance, View Route + Add to Favorite.
- * White background, rounded corners, soft shadow, 16px padding.
- * Heart click when not favorite opens nickname popup; when favorite, removes.
- */
+
 
 import { Layout, Theme } from '@/constants/theme';
 import { setOutletCache } from '@/services/outlet-cache';

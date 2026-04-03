@@ -1,6 +1,4 @@
-/**
- * Feedback form for an outlet: rating and comment. Pass outletId and optionally outletName via params.
- */
+
 
 import { Layout } from '@/constants/theme';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -21,7 +19,7 @@ export default function FeedbackScreen() {
   const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = () => {
-    // TODO: POST to API /feedback with outletId, rating, comment
+
     setSubmitted(true);
     setTimeout(() => router.back(), 1500);
   };

@@ -1,14 +1,8 @@
-/**
- * API service for Find It Customer App.
- * - Auth: login/register (JWT) handled in AuthContext.
- * - Search: search by item query → returns 5 nearest outlets with distance and rating.
- * - Route: get distance and travel time from user location to outlet.
- * Replace BASE_URL and real endpoints when backend is ready.
- */
+
 
 import type { Item, ItemCategory, Outlet, OutletType, RouteInfo, SearchParams } from '@/types/api';
 
-const BASE_URL = 'https://your-api.com/api'; // Replace with your API base URL
+const BASE_URL = 'https://your-api.com/api';
 const REQUEST_TIMEOUT_MS = 30_000;
 
 async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
@@ -42,7 +36,7 @@ async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> 
   return data as T;
 }
 
-/** Search items by name with optional category and outlet type filters */
+
 export async function searchItems(params: SearchParams): Promise<Item[]> {
   const q = new URLSearchParams();
   if (params.query) q.set('q', params.query);
@@ -51,29 +45,29 @@ export async function searchItems(params: SearchParams): Promise<Item[]> {
   return fetchApi<Item[]>(`/items?${q.toString()}`);
 }
 
-/** Get categories for filter dropdown */
+
 export async function getCategories(): Promise<ItemCategory[]> {
   return fetchApi<ItemCategory[]>('/items/categories');
 }
 
-/** Get outlet types for filter */
+
 export async function getOutletTypes(): Promise<OutletType[]> {
   return fetchApi<OutletType[]>('/outlets/types');
 }
 
-/** Get currently open outlets that have the given item */
+
 export async function getOpenOutletsForItem(itemId: string): Promise<Outlet[]> {
   return fetchApi<Outlet[]>(`/items/${itemId}/outlets?open=true`);
 }
 
-/** Options for nearest-outlet search (category + max distance in km) */
+
 export interface SearchNearestOptions {
   category?: ItemCategory;
   outletType?: OutletType;
   maxDistanceKm?: number;
 }
 
-/** Search and return nearest outlets (with distance, rating) within maxDistanceKm; optional category/outletType filter */
+
 export async function searchNearestOutlets(
   query: string,
   userLat?: number,
@@ -90,7 +84,7 @@ export async function searchNearestOutlets(
   return fetchApi<Outlet[]>(`/search/nearest?${q.toString()}`);
 }
 
-/** Get route info (distance + estimated duration) from user to outlet */
+
 export async function getRoute(
   fromLat: number,
   fromLng: number,
@@ -102,11 +96,11 @@ export async function getRoute(
   );
 }
 
-// ——— Mock implementation (no dummy data: returns empty lists; getRoute uses haversine for distance) ———
+
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Haversine distance in km between two lat/lng points */
+
 function haversineKm(
   lat1: number,
   lng1: number,
@@ -125,7 +119,7 @@ function haversineKm(
   return R * c;
 }
 
-const USE_MOCK = true; // Set to false when your API is ready
+const USE_MOCK = true;
 
 export const api = {
   searchItems: (params: SearchParams) => (USE_MOCK ? mockApi.searchItems(params) : searchItems(params)),

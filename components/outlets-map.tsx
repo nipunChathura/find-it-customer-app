@@ -1,16 +1,15 @@
 import type { Outlet } from '@/types/api';
 import React, { useCallback, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import MapView, { Callout, type MapViewProps, Marker } from 'react-native-maps';
+import MapView, { type MapViewProps, Marker } from 'react-native-maps';
 
 import { OutletMarkerCard } from './outlet-marker-card';
-import { ThemedText } from './themed-text';
 
 type OutletsMapProps = {
   outlets: Outlet[];
   initialRegion?: MapViewProps['initialRegion'];
   style?: MapViewProps['style'];
-  /** Marker pin color (e.g. red for outlets) */
+  
   pinColor?: string;
 };
 
@@ -23,7 +22,7 @@ const DEFAULT_REGION = {
   longitudeDelta: 0.05,
 };
 
-/** Hide POIs (restaurants, hotels, etc.); keep roads and city/locality names only. */
+
 const MAP_STYLE_MINIMAL = [
   { featureType: 'poi', elementType: 'all', stylers: [{ visibility: 'off' }] },
   { featureType: 'poi.business', elementType: 'all', stylers: [{ visibility: 'off' }] },
@@ -49,6 +48,18 @@ export function OutletsMap({ outlets, initialRegion, style, pinColor = OUTLET_MA
     setSelectedOutlet(outlet);
   }, []);
 
+  const onMapPress = useCallback(
+    (e: { nativeEvent: { action?: 'press' | 'marker-press' } }) => {
+      if (e.nativeEvent.action === 'marker-press') return;
+      setSelectedOutlet(null);
+    },
+    []
+  );
+
+  const clearSelectedOutlet = useCallback(() => {
+    setSelectedOutlet(null);
+  }, []);
+
   return (
     <View style={[styles.container, style]}>
       <MapView
@@ -58,25 +69,27 @@ export function OutletsMap({ outlets, initialRegion, style, pinColor = OUTLET_MA
         mapType="standard"
         showsUserLocation
         showsMyLocationButton
+        showsCompass={false}
+        toolbarEnabled={false}
         showsPointsOfInterest={false}
         showsBuildings={false}
         customMapStyle={MAP_STYLE_MINIMAL}
+        onPress={onMapPress}
       >
         {outlets.length > 0 &&
           outlets.map((outlet) => (
             <Marker
               key={outlet.id}
               coordinate={{ latitude: outlet.latitude, longitude: outlet.longitude }}
-              title={outlet.name}
-              description={outlet.address || undefined}
               pinColor={pinColor}
               onPress={() => onMarkerPress(outlet)}
+              accessibilityLabel={outlet.name}
             />
           ))}
       </MapView>
       {selectedOutlet && (
         <View style={styles.cardContainer} pointerEvents="box-none">
-          <OutletMarkerCard outlet={selectedOutlet} />
+          <OutletMarkerCard outlet={selectedOutlet} onClose={clearSelectedOutlet} />
         </View>
       )}
     </View>
@@ -94,24 +107,5 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     justifyContent: 'flex-end',
-  },
-  calloutBox: {
-    minWidth: 140,
-    maxWidth: 220,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
-  },
-  calloutTitle: {
-    fontSize: 14,
-    color: '#111',
-  },
-  calloutAddress: {
-    marginTop: 4,
-    fontSize: 12,
-    color: '#666',
   },
 });

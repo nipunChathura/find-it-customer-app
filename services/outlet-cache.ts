@@ -1,7 +1,4 @@
-/**
- * Cache the current outlet (with items) when navigating from home so the outlet page
- * receives full data (price, categoryName, itemImage, etc.) without URL param limits.
- */
+
 
 import type { Outlet } from '@/types/api';
 
